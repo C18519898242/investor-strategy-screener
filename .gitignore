@@ -1,0 +1,6 @@
+# Keep original video files outside the repository.
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
