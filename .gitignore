@@ -4,3 +4,7 @@
 *.avi
 *.mkv
 *.webm
+
+__pycache__/
+*.py[cod]
+
