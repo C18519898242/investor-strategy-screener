@@ -30,6 +30,9 @@ def sync_all(
     batch = begin_sync(connection)
     try:
         counts = fetch(datasets, token)
+        missing = [dataset for dataset in datasets if dataset not in counts]
+        if missing:
+            raise RuntimeError("同步结果缺少所需数据")
         for dataset in datasets:
             batch.record(dataset, counts[dataset])
         batch.publish(finished_at)
