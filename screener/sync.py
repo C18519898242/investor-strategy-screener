@@ -7,6 +7,15 @@ class SyncError(Exception):
     pass
 
 
+def create_tushare_client(env: Mapping[str, str]) -> object:
+    import tushare as ts
+
+    token = read_token(env)
+    client = ts.pro_api(token)
+    client._DataApi__http_url = "https://tl.kaixin8.top/tushare/sdk"
+    return client
+
+
 def read_token(env: Mapping[str, str]) -> str:
     token = env.get("TUSHARE_TOKEN")
     if not token:
