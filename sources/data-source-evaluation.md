@@ -20,7 +20,7 @@
 | 最近三年年报加权平均 ROE | `fina_indicator.roe_waa`、`end_date`、`ann_date` | 官方标为“加权平均净资产收益率”；文档未详细列公式。 | 字段名称和类型匹配；仍应与年报披露值核对。 |
 | 流动比率 | `balancesheet.total_cur_assets`、`total_cur_liab` | 官方列有流动资产、流动负债科目；`fina_indicator.current_ratio` 也是现成字段，但不说明零分母处理。 | 用资产负债表科目计算，以执行策略文档中的零分母规则。 |
 | 营运资本/长期负债 | 上述两科目加 `balancesheet.total_ncl` | 官方列有非流动负债合计。 | 按 `(流动资产－流动负债)/非流动负债合计` 计算。 |
-| 七年逐年股息率 | `dividend.end_date`、`ann_date`、`div_proc`、`cash_div_tax`、`base_share`；年末 `daily_basic.total_mv` | 官方有“分红年度”、公告日、实施进度、每股税前分红、基准股本字段；现成 `dv_ratio` 和 `dv_ttm` 按除息时间窗口定义。 | **需要计算**：按归属会计年度统计，识别同一方案的预案/实施记录、同年多次分红、无分红年度和缺失基准股本。不得直接使用 `dv_ratio` 或 `dv_ttm`。 |
+| 第 1 集近三年逐年股息率 | `dividend.end_date`、`ann_date`、`div_proc`、`cash_div_tax`、`base_share`；年末 `daily_basic.total_mv` | 官方有“分红年度”、公告日、实施进度、每股税前分红、基准股本字段；现成 `dv_ratio` 和 `dv_ttm` 按除息时间窗口定义。第 1 集观察期已按用户决定由视频的 7 年改为与 Q06 相同的 3 个年报年度。 | **需要计算**：按归属会计年度统计，识别同一方案的预案/实施记录、同年多次分红、无分红年度和缺失基准股本。不得直接使用 `dv_ratio` 或 `dv_ttm`。 |
 
 > 单位：`total_mv` 为万元，资产负债表金额为元，`base_share` 为万股，`cash_div_tax` 为每股税前分红。分子、分母必须统一单位；分红金额的乘积单位为万元。应对若干实际分红方案与上市公司公告核对后再使用。
 
