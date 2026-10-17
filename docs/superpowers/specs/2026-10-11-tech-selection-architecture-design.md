@@ -13,7 +13,7 @@
 
 ## 明确留到实现时决定
 
-表名、字段、索引、历史数据保留多久、各接口的更新顺序，以及一次重算的具体耗时，都在实现第 1 集时决定。SQLite 保存 4 年或 10 年数据使用的是同一套技术，因此数据保留期限不属于本次选型。
+各表的具体列清单、除主键外的索引细节、各接口的更新顺序，以及一次重算的具体耗时，都在实现第 1 集时决定（数据分层、保存范围与各表主键已定，见「数据层设计」）。SQLite 保存 4 年或 10 年数据使用的是同一套技术，因此数据保留期限不属于本次选型。
 
 ## 代码组织
 
@@ -61,6 +61,63 @@ investor-strategy-screener/
 检查通过后，筛选只用 `sqlite3` 读取 SQLite，用 `pandas` 按策略代码计算，再由 `report` 写 HTML。筛选过程中不联网。筛选正常完成但没有股票入选时，HTML 明确显示“本次无符合条件的股票”。本地基础数据不可用而不能完成筛选时，属于上面的完整性错误，不能生成看似成功的空名单。
 
 SQLite 保存从 Tushare 取回的原始数据，例如行情、财报、分红和交易日历，同时记录表结构版本和每次完整成功更新的结束时间。程序不提前保存格雷厄姆数或其他策略计算结果。修改代码中的阈值后，使用同一份原始数据重新计算。
+
+原始数据的保存范围已定：**接口返回的字段全部入库**（不裁列），**下载不做行级取舍**（全市场，含已退市股票），**历史起点 11 年**（覆盖后续策略所需的 10 年复合增速并留缓冲）。首次下载覆盖全区间，日常更新只补差集——从库里已保存的范围推出缺什么，不重复全量拉取。原始层只存事实，字段取舍与口径判断都留在筛选计算中。逐条决议与接口实测见 [docs/data-model-proposal.md](../../data-model-proposal.md) 与 [docs/tushare-api-evaluation.md](../../tushare-api-evaluation.md)。
+
+## 数据层设计
+
+数据分三层：**原始层（通用）→ 计算层（按策略）→ 展示层（按策略）**。联网只发生在原始层，计算与展示都只读 SQLite。
+
+```text
+Tushare ──同步（联网）──▶ 原始层（通用，store）──筛选（只读）──▶ 计算层（按策略，strategies/）──▶ 展示层（按策略，report）──▶ HTML
+```
+
+### 原始层
+
+- **一个接口一张表**，列名照抄接口返回的字段名；**接口返回的字段全部入库，不裁列**。
+- 原始层**不存派生指标**（PE_TTM、PB、股息率、净现比、分位等一律在计算层现算），也**不建策略结果表**。
+- 缺失语义（例如"某年没有分红记录等于 0"）由计算层判断，原始层不补默认值。
+- 策略文件只登记**数据名**；"数据名 → 接口"的映射归 `sync`/`store`。一次更新拉取的是**所有已实现策略登记需求的并集**，不为每套策略复制一份数据。
+
+各表主键（财务表的同一报告期会返回多个修订版本，主键必须容纳）：
+
+| 表 | 主键 | 附加索引 |
+| --- | --- | --- |
+| `daily_basic`、`daily`、`adj_factor` | `(ts_code, trade_date)` | `trade_date` |
+| `income`、`balancesheet`、`cashflow` | `(ts_code, end_date, report_type, ann_date, update_flag)` | `end_date` |
+| `fina_indicator` | `(ts_code, end_date, ann_date, update_flag)` | `end_date` |
+| `dividend` | `(ts_code, end_date, ann_date, div_proc)` | `ann_date` |
+| `stock_basic` | `ts_code` | `list_status` |
+| `stock_st` | `(ts_code, trade_date)` | `trade_date` |
+| `suspend_d` | `(ts_code, trade_date, suspend_type)` | `trade_date` |
+| `namechange` | `(ts_code, name, start_date)` | — |
+| `index_member_all` | `(ts_code, l1_code, l2_code, l3_code, in_date)` | `ts_code` |
+
+- 同一报告期的**多个修订版本全部保留**，"取哪一行"是计算层的口径，不在写入时决定。实测财务表**没有"更新时间"字段**，`update_flag` 的语义未定论，因此不能靠某一列挑"最新"。
+- 写入必须**幂等**：主键冲突不报错、不重复，不允许默默覆盖。
+
+### 同步（“更新本地数据”）
+
+- **不写专门的“断点续传”功能**：每次更新读库推出已完成的水位，拉“目标区间 − 已完成区间”的差集。中断只是水位没推进，重跑自然接着补。因此 `sync` 里没有“找断点 / 接着跑”的分支，只有“算差集 → 循环 → 记水位”。
+- **重跑不从起点全量重拉**；**不实现负结果缓存**（不记“已尝试但无数据”的股票），换取 `sync` 更简单。
+- 每次更新固定重拉**最近 7 天**的披露名单与日频数据，用于捕获迟报与财报更正。
+
+| 要拉的数据 | 水位 | 增量方式 |
+| --- | --- | --- |
+| 日频：`daily_basic`、`daily`、`adj_factor` | `MAX(trade_date)` | 用交易日历定出缺失交易日，逐日补（1 次/天） |
+| 分红：`dividend` | `MAX(ann_date)` | 按 `ann_date` 逐日取全市场 |
+| 财务四表 | 逐股已取到的报告期 | `disclosure_date(actual_date=当日)` 取当天披露名单，再逐股拉 |
+| 状态类：`stock_basic`、`stock_st`、`namechange` | 快照 | 每次全量重拉 |
+
+- **首次全量回填**：11 年 × 4 张财务表 × 5577 只 ≈ 24.5 万次调用 ≈ 20 小时（财报单次区间上限 1 年，必须按年分段），`adj_factor` 约 2700 次 ≈ 13 分钟。日常增量平时 1～2 分钟，披露季峰值约 25 分钟。
+
+### 数据库
+
+- **不做迁移准备**：不为了“将来可能换数据库”限制写法，可以用 `INSERT OR REPLACE`、`ON CONFLICT ... DO UPDATE` 等 SQLite 特有写法。SQLite 性能已实测满足（418 万行全表扫描 1.47 秒）。
+- 注意 `INSERT OR REPLACE` 是“删除 + 插入”，**未给出的列会被清成 NULL**，所以要么带全字段，要么用 `ON CONFLICT(主键) DO UPDATE SET 列 = excluded.列`。
+- 日期统一存 TEXT `YYYYMMDD`。
+
+逐条决议、实测数据与证据见 [docs/data-model-proposal.md](../../data-model-proposal.md) 与 [docs/tushare-api-evaluation.md](../../tushare-api-evaluation.md)。
 
 ## 运行约束
 

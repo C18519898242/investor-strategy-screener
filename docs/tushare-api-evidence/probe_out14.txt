@@ -1,0 +1,45 @@
+=== 健康检查 ===
+        第 1 次健康检查成功
+
+=== 1) disclosure_date 是否可用（当期披露计划）===
+[OK   ] disclosure_date end_date=20260930                  -> 5582 行
+        当期披露计划行数: 5582，涉及股票 5582 只
+        actual_date 已填写的: 50 行
+        实际披露日分布（前 10）: {'20261017': 18, '20261016': 15, '20261015': 9, '20261013': 4, '20261014': 3, '20261010': 1}
+
+=== 2) 按实际披露日取当天名单（增量入口）===
+[OK   ] disclosure_date actual_date=20261016               -> 15 行
+        使用 20261016 作为样本日：当天披露 15 只
+
+=== 3) 端到端：对名单里的股票按公告日拉三表 ===
+        样本股票: ['300688.SZ', '300610.SZ', '300018.SZ']
+[OK   ] income 300688.SZ                                   -> 5 行
+[OK   ] balancesheet 300688.SZ                             -> 6 行
+[OK   ] fina_indicator 300688.SZ                           -> 5 行
+[OK   ] income 300610.SZ                                   -> 4 行
+[OK   ] balancesheet 300610.SZ                             -> 7 行
+[OK   ] fina_indicator 300610.SZ                           -> 4 行
+[OK   ] income 300018.SZ                                   -> 5 行
+[OK   ] balancesheet 300018.SZ                             -> 6 行
+[OK   ] fina_indicator 300018.SZ                           -> 4 行
+
+=== 4) 增量成本估算 ===
+        当天披露 15 只 -> 日常增量调用数 = 1 + 3×15 = 46 次
+        按 200 次/分钟约 0.2 分钟
+        当期峰值单日披露 18 只 -> 峰值增量约 55 次调用
+        全量回填仍是 5577×3×11 次（与是否用本接口无关）
+
+=== 汇总 ===
+  disclosure_date end_date=20260930                  5582 行
+  disclosure_date actual_date=20261016               15 行
+  income 300688.SZ                                   5 行
+  balancesheet 300688.SZ                             6 行
+  fina_indicator 300688.SZ                           5 行
+  income 300610.SZ                                   4 行
+  balancesheet 300610.SZ                             7 行
+  fina_indicator 300610.SZ                           4 行
+  income 300018.SZ                                   5 行
+  balancesheet 300018.SZ                             6 行
+  fina_indicator 300018.SZ                           4 行
+
+探针结束。

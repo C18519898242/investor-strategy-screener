@@ -1,0 +1,43 @@
+=== 健康检查 ===
+        第 1 次健康检查成功
+
+=== 1) 跨度上限：单只股票 ===
+[retry] income 600519 18 个月 20240101-20250630            -> Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分（等 30 秒）
+[retry] income 600519 18 个月 20240101-20250630            -> Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分（等 30 秒）
+[FAIL ] income 600519 18 个月 20240101-20250630            -> Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分页语义；request_id=ed2f70df25d14d9b884c8f562
+[retry] income 600519 2 年 20230101-20241231              -> Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分（等 30 秒）
+[retry] income 600519 2 年 20230101-20241231              -> Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分（等 30 秒）
+[FAIL ] income 600519 2 年 20230101-20241231              -> Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分页语义；request_id=349c636bc3eb4b6ba5c0830e7
+[retry] income 600519 30 个月 20230101-20250630            -> Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分（等 30 秒）
+[retry] income 600519 30 个月 20230101-20250630            -> Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分（等 30 秒）
+[FAIL ] income 600519 30 个月 20230101-20250630            -> Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分页语义；request_id=382a3c0f3fac43e88241e91b5
+
+=== 2) 带 ts_code 时叠加 ann_date（逐股按公告日探测）===
+[OK   ] income 600519 ann_date=20260430                  -> 0 行
+[OK   ] income 600519 ann_date=20250430                  -> 1 行
+
+=== 3) dividend 按 ann_date（与财报对照）===
+[retry] dividend ann_date=20260430                       -> Exception: [rate_limited] 请求额度已达到限制；建议等待30秒后重试；request_id=c131b94f（等 30 秒）
+[OK   ] dividend ann_date=20260430                       -> 293 行
+
+=== 4) fina_indicator 单股 1 年区间 ===
+[OK   ] fina_indicator 600519 20250101-20251231          -> 5 行
+  ts_code ann_date end_date update_flag  roe_waa  roe_dt  debt_to_assets    roic   eps
+600519.SH 20260417 20251231           1    32.53 34.4507         16.4154 31.5022 65.66
+600519.SH 20251030 20250930           1    24.64 26.3908         12.8088 24.3310 51.53
+600519.SH 20250813 20250630           1    17.89 19.2432         14.7549 17.4094 36.18
+600519.SH 20250430 20250331           1    10.92 10.9265         14.1430 10.0384 21.38
+600519.SH 20250430 20250331           0    10.92 10.9265         14.1430 10.0384 21.38
+        唯一 (ts_code, end_date) 4 组，出现多行的 1 组
+        update_flag 取值: {'1': 4, '0': 1}
+
+=== 汇总 ===
+  income 600519 18 个月 20240101-20250630            失败：Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分页语义；request_id=ed2f70df25d14d9b884c8f562
+  income 600519 2 年 20230101-20241231              失败：Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分页语义；request_id=349c636bc3eb4b6ba5c0830e7
+  income 600519 30 个月 20230101-20250630            失败：Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分页语义；request_id=382a3c0f3fac43e88241e91b5
+  income 600519 ann_date=20260430                  0 行
+  income 600519 ann_date=20250430                  1 行
+  dividend ann_date=20260430                       293 行
+  fina_indicator 600519 20250101-20251231          5 行
+
+探针结束。

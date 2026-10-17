@@ -1,0 +1,52 @@
+=== 健康检查：代理端是否恢复 ===
+        第 1 次健康检查成功，返回 20 行
+
+=== 1) 财报三表能否按 ann_date 取（单日全市场）===
+[retry] income ann_date=20260430                       -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_（等 30 秒）
+[retry] income ann_date=20260430                       -> Exception: [rate_limited] 请求额度已达到限制；建议等待30秒后重试；request_id=1c1a28e926ef（等 30 秒）
+[FAIL ] income ann_date=20260430                       -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_id=670dd82ba55d41d09667961c8bab1040
+[retry] income ann_date=20260428                       -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_（等 30 秒）
+[retry] income ann_date=20260428                       -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_（等 30 秒）
+[FAIL ] income ann_date=20260428                       -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_id=fa8e934952064244b7db3418375bd8e2
+[retry] balancesheet ann_date=20260430                 -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_（等 30 秒）
+[retry] balancesheet ann_date=20260430                 -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_（等 30 秒）
+[FAIL ] balancesheet ann_date=20260430                 -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_id=89434fce3ee4442fb2d4e6e8df495449
+[retry] fina_indicator ann_date=20260430               -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_（等 30 秒）
+[retry] fina_indicator ann_date=20260430               -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_（等 30 秒）
+[FAIL ] fina_indicator ann_date=20260430               -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_id=60d8d96065344ad2b2f4f475f600f09a
+
+=== 2) 单只股票区间查询（已知可用，用作对照与多版本检查）===
+[OK   ] income 600519.SH 20250101-20251231             -> 4 行
+
+=== 3) 区间查询的参数要求与长度上限 ===
+[retry] income 区间无 ts_code 20260401-20260430           -> ConnectionError: ('Connection aborted.', ConnectionResetError(10054, '（等 30 秒）
+[retry] income 区间无 ts_code 20260401-20260430           -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=65d51d3584db47ec91（等 30 秒）
+[FAIL ] income 区间无 ts_code 20260401-20260430           -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=fc0f52f256dd434c93a0e5ced663b1f8
+[retry] income 区间无 ts_code 20260430-20260430           -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=f898d4871dbb4f9985（等 30 秒）
+[retry] income 区间无 ts_code 20260430-20260430           -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=f32393f702be4d11b1（等 30 秒）
+[FAIL ] income 区间无 ts_code 20260430-20260430           -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=ca16fd2d588c4da5b88f22fd8e6d4701
+[OK   ] income 600519.SH 20240101-20241231（1 年）        -> 4 行
+[retry] income 600519.SH 20230101-20251231（3 年）        -> Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分页语义；（等 30 秒）
+[retry] income 600519.SH 20230101-20251231（3 年）        -> Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分页语义；（等 30 秒）
+[FAIL ] income 600519.SH 20230101-20251231（3 年）        -> Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分页语义；request_id=51c15e412983446e8934d8245c8b1e
+
+=== 4) 同一报告期是否出现多行（D3 关键验证）===
+        income 单公告日: 无数据
+        balancesheet 单公告日: 无数据
+        fina_indicator 单公告日: 无数据
+        600519 区间: 唯一键 4 组，出现多行的 0 组
+        update_flag 取值: {'1': 4}
+        report_type 取值: {'1': 4}
+
+=== 汇总 ===
+  income ann_date=20260430                       失败：Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_id=670dd82ba55d41d09667961c8bab1040
+  income ann_date=20260428                       失败：Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_id=fa8e934952064244b7db3418375bd8e2
+  balancesheet ann_date=20260430                 失败：Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_id=89434fce3ee4442fb2d4e6e8df495449
+  fina_indicator ann_date=20260430               失败：Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_id=60d8d96065344ad2b2f4f475f600f09a
+  income 600519.SH 20250101-20251231             4 行
+  income 区间无 ts_code 20260401-20260430           失败：Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=fc0f52f256dd434c93a0e5ced663b1f8
+  income 区间无 ts_code 20260430-20260430           失败：Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=ca16fd2d588c4da5b88f22fd8e6d4701
+  income 600519.SH 20240101-20241231（1 年）        4 行
+  income 600519.SH 20230101-20251231（3 年）        失败：Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分页语义；request_id=51c15e412983446e8934d8245c8b1e
+
+探针结束。

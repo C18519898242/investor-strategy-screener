@@ -1,0 +1,32 @@
+=== 健康检查 ===
+        健康检查成功
+
+=== 1) adj_factor 逐股历史起点 ===
+[OK   ] adj_factor 600519 20050101-20261231                -> 372 行
+        最早交易日: 20150317，最晚: 20261016
+
+=== 2) 2015-2016 各交易日的全市场覆盖度 ===
+[OK   ] adj_factor trade_date=20150105                     -> 1 行
+        20150105 只有 1 行，样例: [{'ts_code': '600832.SH', 'trade_date': '20150105', 'adj_factor': 17.25}]
+[OK   ] adj_factor trade_date=20150630                     -> 2815 行
+[OK   ] adj_factor trade_date=20151008                     -> 2837 行
+[OK   ] adj_factor trade_date=20151231                     -> 2884 行
+[OK   ] adj_factor trade_date=20160104                     -> 2884 行
+[OK   ] adj_factor trade_date=20160630                     -> 2972 行
+
+=== 3) 对照：daily_basic 同期覆盖度 ===
+[OK   ] daily_basic trade_date=20151008                    -> 2346 行
+[OK   ] daily_basic trade_date=20160104                    -> 2549 行
+
+=== 汇总 ===
+  adj_factor 600519 20050101-20261231                372 行
+  adj_factor trade_date=20150105                     1 行
+  adj_factor trade_date=20150630                     2815 行
+  adj_factor trade_date=20151008                     2837 行
+  adj_factor trade_date=20151231                     2884 行
+  adj_factor trade_date=20160104                     2884 行
+  adj_factor trade_date=20160630                     2972 行
+  daily_basic trade_date=20151008                    2346 行
+  daily_basic trade_date=20160104                    2549 行
+
+探针结束。

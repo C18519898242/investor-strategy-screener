@@ -22,12 +22,14 @@
 
 ## 1. 结论摘要
 
-1. 第 1 集需要 **9 个必需接口**：`trade_cal`、`stock_basic`、`stock_st`、`suspend_d`、`daily_basic`、`income`、`balancesheet`、`fina_indicator`、`dividend`。另有 2 个按需接口（`namechange`、`index_member_all`）。
+1. 第 1 集需要 **9 个必需接口**：`trade_cal`、`stock_basic`、`stock_st`、`suspend_d`、`daily_basic`、`income`、`balancesheet`、`fina_indicator`、`dividend`。另有 2 个按需接口（`namechange`、`index_member_all`），以及 1 个**同步增量专用**接口 `disclosure_date`（第 4.5 节，把日常财报更新从 1.4 小时压到分钟级）。
 2. **`daily` 不需要**。第 1 集只要收盘价和总市值，`daily_basic.close` 与 `daily_basic.total_mv` 已覆盖，且 `daily` 明显更慢。
-3. **财务三表没有全市场批量接口**：`income_vip`/`balancesheet_vip`/`fina_indicator_vip` 在本账号返回 `unknown_api`。财报只能**按单只股票**循环取，这是整个同步设计里最贵的部分，建议做成两阶段筛选（第 7 节）。
+3. **财务三表没有全市场批量接口**：`income_vip`/`balancesheet_vip`/`fina_indicator_vip` 在本账号返回 `unknown_api`。财报只能**按单只股票**循环取，这是整个同步设计里最贵的部分（第 7 节给出修正后的成本）。
 4. **`income` 的单季报表（`report_type='2'`）可用**，实测四个单季之和与年报累计**完全相等**（差 0 元）。因此 [`strategies.md`](../strategies.md) 中「最近 12 个月归母净利润：公式已定，字段待核验」这一行，可以按"字段已核验"处理。
 5. **行业排除只要 1 次调用**：`stock_basic.industry` 直接含「银行」42 只、「保险」5 只，不必逐股查行业。注意申万口径下保险在 **L2「保险Ⅱ」**，用 L1「非银金融」会误杀证券（实测）。
-6. **代理层有 6 条硬约束**（第 6 节）：必须显式传 `fields`、单次区间上限、限频、偶发不可用、慢查询超时、部分参数被静默忽略。实现时必须按这些约束写重试与分段逻辑。
+6. **代理层有 7 条硬约束**（第 6 节）：必须显式传 `fields`、财报查询必须带 `ts_code`、单次区间上限 1 年、限频、偶发不可用、慢查询超时、部分参数被静默忽略。实现时必须按这些约束写重试与分段逻辑。
+7. **同一报告期会返回多个版本**（实测）：`income`/`balancesheet`/`fina_indicator` 都存在同报告期多行，且**两类冲突都有**（同公告日仅 `update_flag` 不同、公告日不同而 `update_flag` 相同）。`update_flag` 的语义**未定论**，不能按"0=最新"取用（第 4.3 节给出两个反例）。三表**都没有"更新时间"字段**。
+8. **两张"已规划"表已实测通过**（第 4.6 节）：`cashflow` 与 `income` 完全同构（逐股取、1 年上限、同报告期多版本）；`adj_factor` 可按交易日取全市场（**5577 行/日**），逐股可一次取长区间，历史自 **2015-03** 起 → 11 年起点够用。
 
 ## 2. 环境与复现方法
 
@@ -41,7 +43,7 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 ```
 
 - 本机沙箱注意：需要设 `UV_CACHE_DIR` 指向项目内目录，否则 `uv` 写缓存被拒。
-- 实测期间共约 80 次只读调用，触发过 1 次限频（`rate_limited`）。
+- 实测期间共约 300 次只读调用（第 1～15 轮），触发过数次限频（`rate_limited`）与上游不可用（`upstream_pool_exhausted`）。
 
 ## 3. 数据需求 → 接口映射
 
@@ -159,8 +161,16 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 - **单季可用（关键实测）**：`report_type='2'`（单季合并）实测可取。贵州茅台 2024 年四个单季归母净利润：24,065,262,374 / 17,630,348,609 / 19,131,941,135 / 25,400,594,303 元，**合计 86,228,146,422 元 = 年报累计 86,228,146,422 元，差 0 元**。
   → 因此**不需要**用累计值做差构造单季值（虽然做差也是合法备选）。
 - `report_type` 官方 12 种取值：1=合并报表（默认）、2=单季合并、3=调整单季合并表、4=调整合并报表、5=调整前合并报表、6=母公司报表、7=母公司单季表、8=母公司调整单季表、9=母公司调整表、10=母公司调整前报表、11=母公司调整前合并报表、12=母公司调整前报表（**官方**）。指定 `report_type` 后实测每次只返回 1 行（**实测**）。
-- `update_flag`：官方 FAQ 说明 `1`=修正后数据、`0`=初始数据，用于识别财务数据修正导致的**重复记录**，即**同一报告期会返回多条**（**官方**）。接口页本身只写"更新标识"（**官方**）。实测默认字段集里包含 `update_flag`（**实测**），但"取最新修订版本"的具体排序规则**未验证**（**推断**）。
-- **区间上限（代理层）**：`income(ts_code='600519.SH', start_date='20240101', end_date='20261231')` → `date_range_too_large`；改为 1 年（20240101~20241231）→ 4 行，半年 → 2 行，一季 → 1 行（**实测**）。**按 1 年分段是安全做法**。
+- `update_flag` 与多版本（**实测**，证据 `probe_out12.txt`、`probe_out13.txt`）：**同一报告期确实会返回多行**——12 只样本 100 个报告期中 `income` 有 10 组、`fina_indicator` 11 组、`balancesheet` 7 组出现多行（25 只样本时为 23 / 28 / 10 组）。多行组的 `update_flag` 组合几乎都是 `(0, 1)`，但也有 `(0, 0)`（两行同为 `0`，公告日不同）。
+- **`update_flag` 语义未定论，不能按"0=最新"取用**（**实测**）：
+  - 单行报告期的 flag 分布三表相反：`fina_indicator` `1`:35 / `0`:2、`income` `1`:35 / `0`:5、`balancesheet` `0`:39 / `1`:4。
+  - 反例一（按 0 取会丢数据）：`fina_indicator` 603366.SH 20250630 同公告日两行，`update_flag=0` 那行 `roe_waa`/`roe_dt`/`eps` 全为空值，`update_flag=1` 那行有值。
+  - 反例二（flag=0 反而更晚）：`income` 301479.SZ 20241231 两行，`update_flag=1` 的 `ann_date=20250221`、`update_flag=0` 的 `ann_date=20250428`，且归母净利润不同（165,216,968.40 / 165,227,269.14）。
+  - 官方 FAQ 称 `1`=修正后、`0`=初始（**官方**），与本机实测不一致；接口页本身只写"更新标识"（**官方**）。
+- **三表都没有"更新时间"字段**（**官方+实测**）：只有 `ann_date`（公告日）、`income.f_ann_date`（实际公告日）、`update_flag`，没有时间戳。因此"哪条最新"无时间戳可依靠，接入时应**全版本入库**，把"取哪一行"留作计算层口径。
+- **区间上限（代理层）**：`income(ts_code='600519.SH', start_date='20240101', end_date='20261231')` → `date_range_too_large`；改为 1 年（20240101~20241231）→ 4 行，半年 → 2 行，一季 → 1 行（**实测**）。补充实测：**18 个月、2 年、30 个月全部失败**，1 年是安全上限（**实测**，`probe_out11.txt`）。**按 1 年分段是安全做法**。
+- **不带 `ts_code` 的区间查询直接失败**（**实测**）：`income(start_date=..., end_date=...)` 不带 `ts_code`（试过 30 天区间与单日区间）→ `invalid_params`；代理要求财报查询必须带 `ts_code`（**实测**，`probe_out10.txt`）。
+- **按 `ann_date` 取全市场财报不可用**（**实测**）：`income`/`balancesheet`/`fina_indicator` 按 `ann_date` 查询连续 9 次返回 `upstream_pool_exhausted`，而同会话内带 `ts_code` 的查询正常（**实测**，`probe_out10.txt`）。带 `ts_code` 时叠加 `ann_date` 可用（`income(ts_code='600519.SH', ann_date='20250430')` → 1 行）。→ **财报增量不能走"按公告日全市场"，必须用第 4.5 节的 `disclosure_date` 名单。**
 - 官方：`ts_code` 必填，**只能按单只股票取历史**，全市场需 `*_vip`（**官方**）；金额字段官方**未标单位**（**官方**）。实测数值量级为元（如 `n_income_attr_p=86228146421.62` 对应 862.28 亿元）（**实测**）。
 
 #### `balancesheet`（[doc_id=36](https://tushare.pro/document/2?doc_id=36)）
@@ -169,6 +179,8 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 - 关键字段（**实测**，默认返回全集）：`total_cur_assets`（流动资产合计）、`total_cur_liab`（流动负债合计）、`total_ncl`（非流动负债合计）、`total_hldr_eqy_exc_min_int`（不含少数股东权益的股东权益合计）、`total_hldr_eqy_inc_min_int`、`total_assets`、`total_liab`、`treasury_share`、`oth_eqt_tools`（其他权益工具）、`report_type`、`update_flag`。
 - **实测**：`balancesheet(ts_code='600519.SH', period='20241231')` → 1 行，四个所需科目齐全；`total_hldr_eqy_exc_min_int=233,105,984,399.47`。
 - **实测**：按区间 `start_date='20240101', end_date='20261231'` → 13 行（约 11 个报告期，可能含调整版本）→ 接入时应按 `period` 精确取，不要依赖区间语义（**推断**）。
+- **多版本实测**（`probe_out12.txt`、`probe_out13.txt`）：12 只样本 100 个报告期中 **7 组**出现同报告期多行。其中存在**同报告期、公告日不同、`update_flag` 相同**的冲突（如 301479.SZ 20241231 两行 `ann_date` 分别 20250221 / 20250428 且 `update_flag` 均为 `0`；第十二轮另见两行 `update_flag` 均为 `1`）→ **主键必须含 `ann_date`**，否则这类记录会互相覆盖。
+- **实测**：1 年区间可用（`fina_indicator` 600519 20250101~20251231 → 5 行，其中 4 个报告期有 1 组重复）→ 与 `income` 同样受"单次 1 年"上限约束。
 - `oth_eqt_tools` 的存在解释了为什么不能用 `daily_basic.pb`：官方 `pb` 分母是"净资产 − 其他权益工具"，与第 1 集"归母股东权益"定义不同（**官方+实测**）。
 - 官方：金额字段未标单位（**官方**）；实测为元（**实测**）。
 
@@ -178,6 +190,7 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 - 关键字段（**实测**）：`roe=38.4283`、`roe_waa=36.02`、`roe_dt=38.434`、`current_ratio`、`working_capital`、`networking_capital`、`debt_to_assets=19.0448`、`end_date`、`ann_date`、`update_flag` 等。**该接口没有 `report_type`/`comp_type`/`f_ann_date`**（**实测+官方**）。
 - **实测**：`roe_waa=36.02` 与贵州茅台 2024 年报未扣非加权 ROE 36.02 一致（与 [`sources/data-source-evaluation.md`](../sources/data-source-evaluation.md) 既有核对结论一致）。
 - 官方限制：单次最多返回 **100 条**；按区间实测可取 18 行（20230101~20261231）（**官方+实测**）。
+- **多版本实测**（`probe_out13.txt`）：12 只样本 100 个报告期中 **11 组**出现同报告期多行，且全部是**同公告日、仅 `update_flag` 不同**（如 603366.SH 20250630：`update_flag=1` 行有 `roe_waa=0.99`，`update_flag=0` 行 `roe_waa` 为空值）→ **主键必须含 `update_flag`**，否则这类记录会互相覆盖；同时**不能按"`update_flag=0` 是最新"取值**，否则会取到空值行。
 - 注意：该接口自带 `current_ratio`、`working_capital` 等现成比率，但第 1 集**必须**用 `balancesheet` 科目自算，以执行策略文档规定的零分母规则（**推断**，依据 [`strategies.md`](../strategies.md) 的实现口径）。
 
 ### 4.4 分红
@@ -194,6 +207,46 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 - **按股票 + `base_share` 反复失败**：`dividend(ts_code='600519.SH', fields='...base_share...')` 连续 4 次都返回 `upstream_pool_exhausted`，而同一时间按 `ann_date` 取全市场成功（**实测**）→ 建议**统一走按公告日取全市场**的路径，并按公告日分段增量更新。
 - 官方：起始时间 2000-01-01（但同页样例含 1995 年数据，文档自相矛盾），单次 2000 行，每日 20~21 点更新，至少 2000 积分（**官方**）。
 
+### 4.5 财报披露日期（`disclosure_date`）—— 同步增量的入口
+
+#### `disclosure_date`（[doc_id=162](https://tushare.pro/document/2?doc_id=162)）
+
+- 参数：`ts_code`、`end_date`（报告期）、`pre_date`（预计披露日）、`actual_date`（**实际披露日**）、`ann_date`，外加 `fields`。输出：`ts_code, ann_date, end_date, pre_date, actual_date, modify_date`（**官方**）。
+- **为什么需要它**：财报三表既不能按 `ann_date` 取全市场（实测 `upstream_pool_exhausted`），也不能不带 `ts_code` 查询（实测 `invalid_params`），逐股全量重拉又要 1.4 小时。`disclosure_date` 提供"某天有哪些股票披露了财报"的名单，把增量调用量从"全市场"降到"当天披露的那几十到上千只"（**实测**）。
+- **实测（`probe_out14.txt`）**：
+  - `disclosure_date(end_date='20260930', fields=...)` → **5582 行**，覆盖全市场当期披露计划；其中 `actual_date` 已填写的 50 行（2026 三季报披露季刚开始）。
+  - `disclosure_date(actual_date='20261016')` → **15 行**，即当天实际披露 15 只。
+  - 端到端：对名单里 3 只股票（300688.SZ / 300610.SZ / 300018.SZ）按 2026 年区间拉 `income`/`balancesheet`/`fina_indicator`，**9 次调用全部成功**。
+- **实测（`probe_out15.txt`）披露季单日峰值**（N 为实测披露只数，调用数与耗时按"1 + 4×N"推算，含第 4.6 节的 `cashflow`）：
+
+| 报告期 | 单日最多披露 | 增量调用（1 + 4×N） | 耗时（按 200 次/分钟） |
+| --- | --- | --- | --- |
+| 2026 一季报 | **1236 只**（20260429） | 4945 次 | **约 25 分钟** |
+| 2026 中报 | 765 只（20260829） | 3061 次 | 约 15.5 分钟 |
+| 2025 年报 | 700 只（20260429） | 2801 次 | 约 14 分钟 |
+| 2026 三季报（进行中） | 18 只（20261017） | 73 次 | 0.4 分钟 |
+
+- **用法**：每次更新按"最近 7 天"的 `actual_date` 逐日取名单（覆盖迟报与更正），再对名单里的股票逐股拉四张财务表；`end_date`（报告期）查询可用于季度校验（**推断**）。
+- **注意**：`disclosure_date` 记录的是"披露计划/实际披露日"，**财报更正公告不一定出现在名单里**，因此仍需保留回补窗口（见数据模型提案 D8）（**推断**）。
+
+### 4.6 已规划待接入的两张表：`cashflow` 与 `adj_factor`
+
+#### `cashflow`（[doc_id=44](https://tushare.pro/document/2?doc_id=44)）
+
+- 服务的条件：自由现金流净现比（第 7 集）、资本支出比率（E04-5、E09-5）。
+- **实测可用（`probe_out16.txt`）**：`cashflow(ts_code='600519.SH', start_date='20250101', end_date='20251231')` → 6 行；`n_cashflow_act`（经营活动现金流净额）与 `c_pay_acq_const_fiolta`（购建固定资产等支付的现金 = 资本支出）都有值；`free_cashflow` 字段名也被接受。
+- **约束与 `income` 完全一致**：单次区间上限 1 年（2 年、11 年 → `date_range_too_large`）；不带 `ts_code` → `invalid_params`；按 `ann_date` 取全市场 → `upstream_pool_exhausted`。
+- **同报告期多版本同样存在**：600519 的 20250930、20250331 各两行（`update_flag` 分别为 0/1）→ 数据模型提案 D3 的主键规则直接适用。
+
+#### `adj_factor`（[doc_id=28](https://tushare.pro/document/2?doc_id=28)）
+
+- 服务的条件：股价近 5 年分位（E02-2、E07-2）。`daily_basic.close` 是**未复权**价，不能用来算分位。
+- **实测可用（`probe_out16.txt`、`probe_out17.txt`）**：
+  - 按交易日取全市场：`adj_factor(trade_date='20261016')` → **5577 行**（含停牌股；同日 `daily_basic` 5567 行，差 10 只即当日停牌数）。
+  - 逐股可一次取长区间：`adj_factor(ts_code='600519.SH', start_date='20050101', end_date='20261231')` → 372 行（**不受财报的 1 年上限约束**）。
+  - 历史起点约 **2015-03**（600519 最早 20150317）；全市场覆盖自 2015-06 起（20150630 → 2815 行、20151008 → 2837 行、20151231 → 2884 行）；20150105 只有 1 行（仅个别股票有数据）。
+- **两种拉法都可行**：按交易日取全市场（11 年约 2700 次 ≈ 13 分钟，天然增量 1 次/天）或逐股取长区间（5577 次）。**建议按交易日取**，与 `daily_basic` 共用同一套"逐日补差集"逻辑。
+
 ## 5. 实测确认的关键口径汇总
 
 | 结论 | 证据 |
@@ -205,6 +258,17 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 | `stock_basic.industry` 可直接识别银行、保险 | 银行 42 只、保险 5 只、证券 50 只、多元金融 23 只 |
 | `stock_st` 与 `stock_basic.name` 含 ST 的数量一致 | 同日均 201 只 |
 | 分红 `cash_div_tax × base_share` 单位为万元 | 0.4 × 46914.4503 = 18765.78 万元 |
+| **同一报告期会返回多个版本**（三表都是） | 12 只样本 100 个报告期中：`fina_indicator` 11 组、`income` 10 组、`balancesheet` 7 组出现多行 |
+| **多版本有两类冲突，主键须同时含 `ann_date` 与 `update_flag`** | 同公告日仅 flag 不同（`fina_indicator` 11 组、`income` 10 组）；公告日不同而 flag 相同（`balancesheet` 两行 flag 均为 `0`，另一例均为 `1`） |
+| **`update_flag` 语义未定论，不能按"0=最新"取** | `fina_indicator` 603366.SH 20250630 的 `update_flag=0` 行 `roe_waa` 为空值；`income` 301479.SZ 20241231 的 `update_flag=0` 行公告日更晚（20250428 vs 20250221） |
+| **三张财务表都没有"更新时间"字段** | 官方字段表与实测返回均无时间戳，只有 `ann_date`/`f_ann_date`/`update_flag` |
+| **财报单次区间上限是 1 年** | 1 年区间成功；18 个月、2 年、30 个月均 `date_range_too_large` |
+| **财报查询必须带 `ts_code`** | 不带 `ts_code` 的 `income` 区间查询（30 天与单日）均 `invalid_params` |
+| **`disclosure_date(actual_date=某日)` 可给出当天披露名单** | 20261016 → 15 行；端到端对 3 只股票拉三表 9 次调用全部成功 |
+| **披露季单日峰值 1236 只** | 2026 一季报 20260429 单日 1236 只 → 增量 1 + 4×1236 = 4945 次调用 ≈ 25 分钟 |
+| **`cashflow` 与 `income` 完全同构** | 1 年区间 6 行；2 年/11 年 → `date_range_too_large`；不带 `ts_code` → `invalid_params`；按 `ann_date` 全市场 → `upstream_pool_exhausted`；20250930、20250331 各两行 |
+| **`adj_factor` 按交易日取全市场 5577 行** | 20261016 → 5577 行（含停牌股），同日 `daily_basic` 5567 行（差 10 只即停牌数） |
+| **`adj_factor` 逐股可一次取长区间，历史自 2015-03 起** | 600519 20050101-20261231 → 372 行，最早 20150317；全市场 20151008 → 2837 行 |
 | `dividend` 默认字段不含 `base_share` | 默认 14 个字段中无 `base_share`/`base_date` |
 
 ## 6. 数据源与代理层约束（实现时必须处理）
@@ -213,11 +277,11 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 
 | 错误码 | 含义 | 实测触发 | 实现要求 |
 | --- | --- | --- | --- |
-| `invalid_params` | 业务参数缺失或格式不合法 | **不传 `fields`** 的 `stock_basic`/`index_classify`；`exchange=''`；`index_member_all(l1_code=..., is_new='N')` | **所有调用显式传 `fields`**；不要传空字符串参数 |
+| `invalid_params` | 业务参数缺失或格式不合法 | **不传 `fields`** 的 `stock_basic`/`index_classify`；`exchange=''`；`index_member_all(l1_code=..., is_new='N')`；**财报区间查询不带 `ts_code`** | **所有调用显式传 `fields`**；不要传空字符串参数；**财报必须逐股取** |
 | `unknown_api` | 接口不存在或未开放 | `income_vip`、`balancesheet_vip`、`fina_indicator_vip` | **不能依赖全市场财报批量接口**，必须逐股循环 |
-| `date_range_too_large` | 历史区间超过单次安全范围 | `income` 按公告日跨 2.75 年 | 财报按**年**分段（实测 1 年安全） |
+| `date_range_too_large` | 历史区间超过单次安全范围 | `income` 按公告日跨 2.75 年；**财报跨 18 个月 / 2 年 / 30 个月** | 财报按**年**分段（实测 1 年安全，1 年 = 上限） |
 | `rate_limited` | 请求额度达到限制，建议等 30 秒 | 连续调用 `stock_basic` 多值 `list_status` | 需要**退避重试**（30 秒级） |
-| `upstream_pool_exhausted` | 上游数据当前不可用 | `dividend(ts_code=..., fields 含 base_share)` 连续 4 次 | 需要**重试 + 换查询路径**（改按 `ann_date`） |
+| `upstream_pool_exhausted` | 上游数据当前不可用 | `dividend(ts_code=..., fields 含 base_share)` 连续 4 次；**`income`/`balancesheet`/`fina_indicator` 按 `ann_date` 取全市场连续 9 次** | 需要**重试 + 换查询路径**（分红改按 `ann_date`；财报改走 `disclosure_date` 名单） |
 | 连接被重置 / `Read timed out` | 响应过大或上游慢 | `daily` 不传 `fields`（30 秒超时）、`index_member_all` 无参数、`daily_basic` 全市场偶发超时 | 默认 30 秒超时**不够**，建议 ≥120 秒 + 重试 |
 
 其它实测行为：
@@ -240,38 +304,53 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 | `daily_basic` | ~16 | 筛选日 + 12 个季末 + 3 个年度末 |
 | `trade_cal` | 1~2 | 推导上一交易日与季末取价日 |
 
-**贵的：财务三表逐股循环**
+**贵的：财务三表逐股循环（2026-10-17 修正）**
 
-`income`（按年分段约 4~5 次/股）+ `balancesheet`（1 次/股）+ `fina_indicator`（1 次/股）≈ 6~7 次/股 × 5577 只 ≈ **3.5 万次调用**。按 2000 积分档 200 次/分钟估算约 **3 小时**，且必然触发限频退避。
+原估的"6~7 次/股 ≈ 3.5 万次调用 ≈ 3 小时"**是错的**——财报单次区间上限实测为 **1 年**（18 个月即失败），逐股回填必须按年分段：
 
-**建议：两阶段筛选**
+| 场景 | 调用次数 | 耗时（按 200 次/分钟） |
+| --- | --- | --- |
+| 首次全量回填 **11 年 × 4 张财务表**（`income`/`balancesheet`/`fina_indicator`/`cashflow`，5577 只 × 11 段） | 约 24.5 万次 | **约 20 小时** |
+| 首次全量回填日频（`daily_basic`、`adj_factor`，按交易日） | 每张表约 2700 次 | 每张表约 13 分钟 |
+| 仅 3 张财务表（不含 `cashflow`，第 1～2 集够用） | 约 18.4 万次 | 约 15 小时 |
 
-1. 第一阶段只花约 20 次调用，用 `daily_basic`（E01-8 总市值 > 50 亿）、`stock_basic`（板块、行业排除银行/保险）、`stock_st`（ST）、`suspend_d`（停牌）把股票池从 5577 只压到很小的规模。
-2. 第二阶段只对活下来的股票拉 `income`/`balancesheet`/`fina_indicator`，再算 E01-1～E01-7。
+→ 全量回填是"跑一夜到一天"的量级，**必须能中断续跑**（数据模型提案 D8 的差集机制）。数据模型提案 D7 已决定首次回填含全部已规划表（4 张财务表 + `adj_factor`）。
 
-这样逐股调用量可降一个数量级。注意这不改变筛选结果口径：被第一阶段排除的股票本来就不满足 E01-8 或股票池规则。
+**日常增量：走 `disclosure_date` 名单（第 4.5 节）**
+
+1 次调用取当天实际披露名单 → 对名单里的股票逐股拉四张财务表（1 + 4×N，含第 4.6 节的 `cashflow`）。平时 N 为十几到几十只（**<1.5 分钟**），披露季峰值 N=1236 只（**约 25 分钟**）。
+
+**已放弃的备选：两阶段筛选**
+
+原建议"先用约 20 次调用把股票池压小，再只对活下来的股票拉财报"，可把逐股调用量降一个数量级，但已决定**不做**（数据模型提案 D7：原始层全量镜像，不放列也不放行）。原因：原始层是跨策略共享的，两阶段只服务第 1 集，会让库里出现"只有第 1 集需要的股票"的数据空洞。
 
 `dividend` 建议按 `ann_date` 逐日取全市场（3 年约 750 个公告日 ≈ 750 次调用、约 10 万行），比逐股取更稳（逐股 + `base_share` 实测失败）。
 
 ## 8. 待验证 / 未定项
 
-1. `update_flag` 修订版本的排序规则（`ann_date` / `f_ann_date` / `update_flag` 三者如何决定"最新版本"）**未验证**。
-2. 分红去重的具体规则（同一 `end_date` 下 `预案`→`股东大会通过`→`实施` 如何合并、"取消"是否存在）**未验证**。
-3. `list_status='D'`/`'P'` 等列表是否含 B 股**未核验**。
-4. `index_member_all` 全表仅约 3000 行、少于 5577 只股票的原因**未知**；如将来需要申万口径，需重新核验覆盖度。
-5. 财务字段的官方单位未标注（实测量级为元），接入时应做一次样本对账再固化。
-6. 官方直连（`api.tushare.pro`）是否也有"`fields` 必填""区间上限"等限制**未知**；本文所有约束结论都基于本机代理。
-7. 单季 `income` 是否对**所有**公司（含金融类、亏损类）都存在 `report_type='2'` 记录**未验证**，只在贵州茅台 2024 年验证过。
+1. **`update_flag` 的语义**：已实测"同一报告期会返回多行、两类冲突都存在"，但**哪个值代表最新仍未定论**（三表单行报告期的 flag 分布相反，且存在"按 0 取到空值行"与"flag=0 反而公告日更晚"两个反例）。当前处理：全版本入库，计算层口径待定。
+2. **`f_ann_date` 能否作为"最新版本"的判据未验证**（只有 `income` 实测有该字段；`balancesheet` 未请求过）。
+3. 分红去重的具体规则（同一 `end_date` 下 `预案`→`股东大会通过`→`实施` 如何合并、"取消"是否存在）**未验证**。
+4. `list_status='D'`/`'P'` 等列表是否含 B 股**未核验**。
+5. `index_member_all` 全表仅约 3000 行、少于 5577 只股票的原因**未知**；如将来需要申万口径，需重新核验覆盖度。
+6. 财务字段的官方单位未标注（实测量级为元），接入时应做一次样本对账再固化。
+7. 官方直连（`api.tushare.pro`）是否也有"`fields` 必填""财报区间上限 1 年""按 `ann_date` 取全市场不可用"等限制**未知**；本文所有约束结论都基于本机代理。
+8. 单季 `income` 是否对**所有**公司（含金融类、亏损类）都存在 `report_type='2'` 记录**未验证**，只在贵州茅台 2024 年验证过。
+9. **财报更正公告是否出现在 `disclosure_date` 名单里未验证**；若不出现在名单里，则更正只能靠回补窗口（重拉最近 7 天 + 季度校验）捕获。
+10. `disclosure_date` 的 `end_date`（报告期）查询是否可用于"季度校验"（对比库内已有的报告期清单）**未验证**。
 
 ## 9. 与现有文档的关系
 
-本文结论可以支持对下列文档做**后续**修订（本次未改）：
+本文结论可以支持对下列文档做**后续**修订（除已标注"已同步"的一条外，本次未改）：
+
+- ✅ **已同步（2026-10-17）**：[`docs/superpowers/specs/2026-10-11-tech-selection-architecture-design.md`](superpowers/specs/2026-10-11-tech-selection-architecture-design.md) 的「数据流」已补上"字段全部入库、不做行级取舍、历史起点 11 年、日常只补差集"，并新增「数据层设计」一节（分层模型、一接口一表、各表主键、多版本规则、同步差集与增量路径、首次回填成本、数据库写法）；「明确留到实现时决定」中与 11 年起点冲突的表述已改。
 
 - [`strategies.md`](../strategies.md) 第 280 行「最近 12 个月归母净利润 …… **公式已定，字段待核验**」：单季字段已实测可用，可升级为"字段已核验"。
 - [`strategies.md`](../strategies.md) 第 272 行附近表格中「当前及历史 `PE_TTM`」「当前 `PB`」的"需要计算"结论**保持不变**，本文未推翻任何既有口径。
 - [`strategies.md`](../strategies.md) 第 286 行「流动比率、营运资本/长期负债」：所需三个 `balancesheet` 科目已实测齐全。
 - [`strategies.md`](../strategies.md) 第 21 行通用规则 3「股票状态和行业分类字段仍须在数据源接入时核验」：本文第 3.1、4.2 节即为核验结果（`market` 可识别北交所、`industry` 可排除银行/保险、`stock_st` 可判 ST、`namechange` 可识别退市整理期）。
 - [`sources/data-source-evaluation.md`](../sources/data-source-evaluation.md) 第 41 行「实际账号能否调用、历史年份是否齐全、停牌日与退市股票的覆盖、分页及频率限制，均待接入测试」：本文已给出实测答案（全部可调用；历史总市值回溯到 2015 年；停牌股无记录；分页与限频行为见第 6 节）。
+- [`docs/data-model-proposal.md`](data-model-proposal.md)：该提案的 D3（多版本与主键）、D7（全量下载的代价与时间起点）、D8（同步进度与差集、财报增量路径）均已按本文第 4.3、4.5、7 节的实测结论更新。本文是该提案的**证据来源**，两者结论必须保持一致。
 - [`docs/superpowers/specs/2026-10-11-tech-selection-architecture-design.md`](superpowers/specs/2026-10-11-tech-selection-architecture-design.md) 第 68 行「Tushare Token 只从本机环境变量读取」：当前实现是 [`.env`](../.env.example) 文件加环境变量、由 [`screener/config.py`](../screener/config.py) 统一读取，措辞可更新。该文档中**没有**"代理地址固定为某 URL"的表述（本次核对确认），与本评估无关。
 
 ## 10. 证据文件清单
@@ -288,6 +367,15 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 | `probe_apis6.py` / `probe_out6.txt` | 第六轮：`*_vip` 不存在、分红按公告日取 `base_share`、B 股与北交所分布 |
 | `probe_apis7.py` / `probe_out7.txt` | 第七轮：`l1_code` 过滤失效、保险 L2 逐股对照 |
 | `probe_apis8.py` / `probe_out8.txt` | 第八轮：`stock_basic.industry` 银行/保险数量、`limit`/`offset` 分页 |
+| `probe_apis9.py` / `probe_out9.txt` | 第九轮：`ann_date` 增量探测（整轮失败：限频后连续 `upstream_pool_exhausted`；仅测到"`income` 区间不带 `ts_code` → `invalid_params`"） |
+| `probe_apis10.py` / `probe_out10.txt` | 第十轮：健康检查后重测——`ann_date` 全市场仍全部失败；`income` 单股 1 年区间成功（4 行、0 重复组）；区间不带 `ts_code` 失败；3 年区间 `date_range_too_large` |
+| `probe_apis11.py` / `probe_out11.txt` | 第十一轮：区间上限定位（18 个月/2 年/30 个月全部失败）；带 `ts_code` 叠加 `ann_date` 可用；`dividend` 按 `ann_date` 可用；`fina_indicator` 单股 1 年区间 5 行（**首次发现同报告期多行**） |
+| `probe_apis12.py` / `probe_out12.txt` | 第十二轮：25 只股票 × 3 表的多版本普查（`fina_indicator` 28 组、`income` 23 组、`balancesheet` 10 组多行） |
+| `probe_apis13.py` / `probe_out13.txt` + `probe13_*.csv` | 第十三轮：`update_flag` 语义判定（单行报告期 flag 分布三表相反；两个反例：空值行与更晚公告日行）；原始行存成 CSV |
+| `probe_apis14.py` / `probe_out14.txt` | 第十四轮：`disclosure_date` 可用性（当期 5582 行、`actual_date` 取当天名单 15 行、端到端逐股拉三表成功） |
+| `probe_apis15.py` / `probe_out15.txt` | 第十五轮：披露季单日峰值（2026 一季报 20260429 单日 1236 只 → 增量约 18.5 分钟） |
+| `probe_apis16.py` / `probe_out16.txt` | 第十六轮：`cashflow` 与 `adj_factor` 补测（`cashflow` 与 `income` 同构、同报告期多版本；`adj_factor` 按日全市场 5577 行、逐股可长区间） |
+| `probe_apis17.py` / `probe_out17.txt` | 第十七轮：`adj_factor` 历史起点（600519 最早 20150317；全市场自 2015-06 起完整；20150105 仅 1 行） |
 
 脚本从 `.env` 读取 token（经 `load_settings()`），**不打印 token**；输出文件里只有接口返回的字段、行数、样例行与代理 `request_id`。
 

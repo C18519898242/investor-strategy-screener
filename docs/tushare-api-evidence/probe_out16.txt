@@ -1,0 +1,56 @@
+=== 健康检查 ===
+        健康检查成功
+
+=== 1) cashflow 基本可用性与区间上限 ===
+[OK   ] cashflow 600519 1 年 20250101-20251231                -> 6 行
+  ts_code ann_date end_date report_type update_flag  n_cashflow_act  c_pay_acq_const_fiolta
+600519.SH 20251030 20250930           1           0    3.819680e+10       2.282862e+09     
+600519.SH 20251030 20250930           1           1    3.819680e+10       2.282862e+09     
+600519.SH 20250813 20250630           1           1    1.311906e+10       1.595996e+09     
+600519.SH 20250430 20250331           1           0    8.809196e+09       9.011043e+08     
+600519.SH 20250430 20250331           1           1    8.809196e+09       9.011043e+08     
+[retry] cashflow 600519 2 年 20240101-20251231                -> ReadTimeout: HTTPSConnectionPool(host='tl.kaixin8.top', po（等 30 秒）
+[retry] cashflow 600519 2 年 20240101-20251231                -> Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原（等 30 秒）
+[FAIL ] cashflow 600519 2 年 20240101-20251231                -> ConnectionError: ('Connection aborted.', ConnectionResetError(10054, '远程主机强迫关闭了一个现有的连接。', None, 10054, None
+[retry] cashflow 600519 11 年 20160101-20261231               -> Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原（等 30 秒）
+[retry] cashflow 600519 11 年 20160101-20261231               -> Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原（等 30 秒）
+[FAIL ] cashflow 600519 11 年 20160101-20261231               -> Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分页语义；request_id=4a22452d3fe543258308
+
+=== 2) cashflow 是否支持按公告日取全市场 / 不带 ts_code ===
+[retry] cashflow ann_date=20260430（全市场）                      -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒（等 30 秒）
+[retry] cashflow ann_date=20260430（全市场）                      -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒（等 30 秒）
+[FAIL ] cashflow ann_date=20260430（全市场）                      -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_id=418a89d1601249a081d355149fbb
+[retry] cashflow 区间不带 ts_code                                -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=664f30（等 30 秒）
+[retry] cashflow 区间不带 ts_code                                -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=dc5108（等 30 秒）
+[FAIL ] cashflow 区间不带 ts_code                                -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=3b6fb5f7fa7e4cdaa2992ca8933edc0e
+
+=== 3) cashflow 的资本支出 / 自由现金流字段是否存在 ===
+[OK   ] cashflow 600519 period=20241231 含 free_cashflow      -> 1 行
+
+=== 4) adj_factor 按交易日取全市场 ===
+[OK   ] adj_factor trade_date=20261016（全市场）                  -> 5577 行
+  ts_code trade_date  adj_factor
+000001.SZ   20261016    142.0699
+000002.SZ   20261016    181.7040
+000006.SZ   20261016     39.7400
+
+=== 5) adj_factor 区间能力与历史深度 ===
+[OK   ] adj_factor 600519 11 年 20160101-20261231             -> 371 行
+[OK   ] adj_factor 600519 trade_date=20261016                -> 1 行
+[OK   ] adj_factor 全市场 trade_date=20160104（历史深度）             -> 2884 行
+[OK   ] adj_factor 全市场 trade_date=20150105（更早）               -> 1 行
+
+=== 汇总 ===
+  cashflow 600519 1 年 20250101-20251231                6 行
+  cashflow 600519 2 年 20240101-20251231                失败：ConnectionError: ('Connection aborted.', ConnectionResetError(10054, '远程主机强迫关闭了一个现有的连接。', None, 10054, None
+  cashflow 600519 11 年 20160101-20261231               失败：Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分页语义；request_id=4a22452d3fe543258308
+  cashflow ann_date=20260430（全市场）                      失败：Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_id=418a89d1601249a081d355149fbb
+  cashflow 区间不带 ts_code                                失败：Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=3b6fb5f7fa7e4cdaa2992ca8933edc0e
+  cashflow 600519 period=20241231 含 free_cashflow      1 行
+  adj_factor trade_date=20261016（全市场）                  5577 行
+  adj_factor 600519 11 年 20160101-20261231             371 行
+  adj_factor 600519 trade_date=20261016                1 行
+  adj_factor 全市场 trade_date=20160104（历史深度）             2884 行
+  adj_factor 全市场 trade_date=20150105（更早）               1 行
+
+探针结束。

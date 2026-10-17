@@ -1,0 +1,28 @@
+=== A) 财报三表能否按 ann_date 取（单日全市场）===
+[FAIL ] income ann_date=20260430                     -> Exception: [rate_limited] 请求额度已达到限制；建议等待30秒后重试；request_id=5b5aee2b57854984af108ee67204d801
+        公告日 20260430 无数据，换下一个
+[FAIL ] income ann_date=20260429                     -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_id=e210b28e195a4ca19a3379228b81
+        公告日 20260429 无数据，换下一个
+[FAIL ] income ann_date=20260428                     -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_id=70a8ccb392404fbbbb16d964d900
+        公告日 20260428 无数据，换下一个
+[FAIL ] income ann_date=20260425                     -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_id=40df3ff76cfa4727a1339e1e7cd1
+        公告日 20260425 无数据，换下一个
+[FAIL ] balancesheet ann_date=20260430               -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_id=6b4ea09dda804bd881a0e60cbca0
+[FAIL ] fina_indicator ann_date=20260430             -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；request_id=5db277c266224c9489e92671a6762193
+
+=== B) 按公告日的区间上限（决定一次更新要几次调用）===
+[FAIL ] income 30 天区间 20260401-20260430              -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=bea9f0965c624631af500e09e79eed93
+[FAIL ] income 90 天区间 20260101-20260331              -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=fee8c0950cdc46bdb2724ce082bc0446
+[FAIL ] income 365 天区间 20260101-20261231             -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=e2ce3cea121e40f2bb008e3ee49df472
+
+=== C) 同一报告期是否出现多行（D3 的关键验证）===
+        income 单公告日: 无数据，跳过重复检查
+        balancesheet 单公告日: 无数据，跳过重复检查
+        fina_indicator 单公告日: 无数据，跳过重复检查
+
+=== D) 单只股票的多年区间：重复行与 update_flag 取值 ===
+[FAIL ] 600519.SH 20240101-20261231                  -> Exception: [date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分页语义；request_id=c32189b228d34f6c9893
+
+=== E) 单公告日的报告期分布（判断一次增量覆盖多少报告期）===
+
+探针结束。
