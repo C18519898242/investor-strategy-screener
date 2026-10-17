@@ -5,8 +5,24 @@ from pathlib import Path
 import pandas as pd
 
 from screener.cli import main
+from screener.config import Settings
 from screener.store import begin_sync, open_database
 from screener.strategies.base import Strategy, StrategySpec
+
+
+PROXY_URL = "https://tl.kaixin8.top/tushare/sdk"
+
+
+def settings(
+    tushare_token: str = "SECRET-TOKEN-VALUE",
+    tushare_api_url: str = PROXY_URL,
+) -> Settings:
+    """隔离的配置对象：不读本机 .env，值只由测试代码给定。"""
+    return Settings(
+        _env_file=None,
+        tushare_token=tushare_token,
+        tushare_api_url=tushare_api_url,
+    )
 
 
 class ReadyStrategy(Strategy):
@@ -35,7 +51,7 @@ class MenuTest(unittest.TestCase):
         self.connection.close()
         shutil.rmtree(self.root, ignore_errors=True)
 
-    def _run(self, answers):
+    def _run(self, answers, config=None):
         values = iter(answers)
 
         def answer(prompt=""):
@@ -48,7 +64,7 @@ class MenuTest(unittest.TestCase):
             input_fn=answer,
             output_fn=self.output.append,
             connection=self.connection,
-            env={"TUSHARE_TOKEN": "SECRET-TOKEN-VALUE"},
+            settings=settings() if config is None else config,
             fetch=self._fetch,
             clock=lambda: "2026-10-11 09:00:00",
             strategies=(ReadyStrategy(),),
@@ -84,3 +100,19 @@ class MenuTest(unittest.TestCase):
         text = "\n".join(self.output)
         self.assertIn("2026-10-11 09:00:00", text)
         self.assertNotIn("SECRET-TOKEN-VALUE", text)
+
+    def test_one_run_reports_every_missing_config_name(self):
+        code = self._run(["1", "1", ""], config=settings(tushare_token="", tushare_api_url=""))
+
+        self.assertEqual(code, 1)
+        text = "\n".join(self.output)
+        self.assertIn("缺少 TUSHARE_TOKEN、TUSHARE_API_URL", text)
+        self.assertEqual(self.fetch_calls, 0)
+
+    def test_one_run_reports_the_single_missing_name(self):
+        code = self._run(["1", "1", ""], config=settings(tushare_api_url=""))
+
+        self.assertEqual(code, 1)
+        text = "\n".join(self.output)
+        self.assertIn("缺少 TUSHARE_API_URL，请在 .env 或环境变量中设置", text)
+        self.assertNotIn("TUSHARE_TOKEN", text)

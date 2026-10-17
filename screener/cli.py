@@ -1,9 +1,10 @@
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
+from screener.config import Settings
 from screener.report import render_html, write_result
 from screener.store import last_successful_sync_at, published_datasets
 from screener.strategies import Strategy, load_builtin_strategies
@@ -32,7 +33,7 @@ def main(
     input_fn: Callable[[str], str] = input,
     output_fn: Callable[[str], None] = print,
     connection,
-    env: Mapping[str, str],
+    settings: Settings,
     fetch: Callable = fetch_not_implemented,
     clock: Callable[[], str] = lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     strategies: tuple[Strategy, ...] | None = None,
@@ -48,7 +49,7 @@ def main(
         output_fn("0. 退出")
         choice = input_fn("请选择：")
         if choice == "1":
-            code = _sync_menu(connection, strategies, env, fetch, clock, input_fn, output_fn)
+            code = _sync_menu(connection, strategies, settings, fetch, clock, input_fn, output_fn)
         elif choice == "2":
             code = _screen_menu(connection, strategies, output_root, input_fn, output_fn)
         elif choice == "0":
@@ -60,7 +61,7 @@ def main(
     return 1
 
 
-def _sync_menu(connection, strategies, env, fetch, clock, input_fn, output_fn) -> int:
+def _sync_menu(connection, strategies, settings, fetch, clock, input_fn, output_fn) -> int:
     updated = last_successful_sync_at(connection) or "无"
     output_fn("更新本地数据")
     output_fn(f"1. 开始更新 ({updated})")
@@ -77,7 +78,7 @@ def _sync_menu(connection, strategies, env, fetch, clock, input_fn, output_fn) -
         finished_at = sync_all(
             connection,
             datasets=datasets,
-            env=env,
+            settings=settings,
             fetch=fetch,
             finished_at=clock(),
         )

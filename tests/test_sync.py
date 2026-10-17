@@ -2,8 +2,24 @@ import shutil
 import unittest
 from pathlib import Path
 
+from screener.config import Settings
 from screener.store import last_successful_sync_at, open_database, published_datasets
 from screener.sync import SyncError, sync_all
+
+
+PROXY_URL = "https://tl.kaixin8.top/tushare/sdk"
+
+
+def settings(
+    tushare_token: str = "SECRET-TOKEN-VALUE",
+    tushare_api_url: str = PROXY_URL,
+) -> Settings:
+    """隔离的配置对象：不读本机 .env，值只由测试代码给定。"""
+    return Settings(
+        _env_file=None,
+        tushare_token=tushare_token,
+        tushare_api_url=tushare_api_url,
+    )
 
 
 class SyncOrchestrationTest(unittest.TestCase):
@@ -21,7 +37,7 @@ class SyncOrchestrationTest(unittest.TestCase):
         sync_all(
             connection,
             datasets=("prices",),
-            env={"TUSHARE_TOKEN": "SECRET-TOKEN-VALUE"},
+            settings=settings(),
             fetch=lambda datasets, token: {"prices": 1},
             finished_at="2026-10-11 09:00:00",
         )
@@ -33,7 +49,7 @@ class SyncOrchestrationTest(unittest.TestCase):
             sync_all(
                 connection,
                 datasets=("financials",),
-                env={"TUSHARE_TOKEN": "SECRET-TOKEN-VALUE"},
+                settings=settings(),
                 fetch=fail,
                 finished_at="2026-10-11 10:00:00",
             )
@@ -48,7 +64,21 @@ class SyncOrchestrationTest(unittest.TestCase):
             sync_all(
                 connection,
                 datasets=("prices",),
-                env={},
+                settings=settings(tushare_token=""),
+                fetch=lambda datasets, token: {},
+                finished_at="2026-10-11 09:00:00",
+            )
+
+        self.assertIsNone(last_successful_sync_at(connection))
+
+    def test_missing_api_url_does_not_open_batch(self):
+        connection = open_database(self.path)
+
+        with self.assertRaisesRegex(SyncError, "缺少 TUSHARE_API_URL"):
+            sync_all(
+                connection,
+                datasets=("prices",),
+                settings=settings(tushare_api_url=""),
                 fetch=lambda datasets, token: {},
                 finished_at="2026-10-11 09:00:00",
             )
