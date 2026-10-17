@@ -31,7 +31,8 @@ cache_dir = "test-temp/.pytest_cache"
 line-length = 100
 target-version = "py313"
 # 文档里的 Python 片段是示例（含历史写法），只检查与格式化真正的 .py 文件。
-extend-exclude = ["*.md"]
+# docs/tushare-api-evidence/ 是一次性探针脚本，作为实测证据原样保留，不改写也不格式化。
+extend-exclude = ["*.md", "docs/tushare-api-evidence"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

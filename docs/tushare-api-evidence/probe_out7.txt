@@ -1,0 +1,17 @@
+=== 按行业批量取成分（银行 801780.SI）===
+[OK   ] l1_code + fields                             -> 3000 行
+        样例: [{"ts_code":"603496.SH","name":"恒为科技","l1_code":"801750.SI","l1_name":"计算机","l2_name":"计算机设备","l3_name":"其他计算机设备","in_date":"20170614","out_date":null,"is_new":"Y"},{"ts_code":"600463.SH","name":"空港股份","l1_code":"801180.SI","l1_name":"房地产","l2_name":"房地产开发","l3_name":"产业地产","in_date":"20040325","out_date":null,"is_new":"Y"},{"ts_code":"002120.SZ","name":"韵达股份","l1_code":"801170.SI","l1_name":"交通运输","l2_name":"物流","l3_name":"快递","in_date":"20070313","out_date":null,"is_new":"Y"}]
+[OK   ] l1_code + is_new=Y + fields                  -> 3000 行
+        样例: [{"ts_code":"603496.SH","name":"恒为科技","l1_code":"801750.SI","l1_name":"计算机","l2_name":"计算机设备","l3_name":"其他计算机设备","in_date":"20170614","out_date":null,"is_new":"Y"},{"ts_code":"600463.SH","name":"空港股份","l1_code":"801180.SI","l1_name":"房地产","l2_name":"房地产开发","l3_name":"产业地产","in_date":"20040325","out_date":null,"is_new":"Y"},{"ts_code":"002120.SZ","name":"韵达股份","l1_code":"801170.SI","l1_name":"交通运输","l2_name":"物流","l3_name":"快递","in_date":"20070313","out_date":null,"is_new":"Y"}]
+[FAIL ] l1_code + is_new=N + fields                  -> ConnectionError: ('Connection aborted.', ConnectionResetError(10054, '远程主机强迫关闭了一个现有的连接。', None, 1
+
+=== 无参数全量（看是否支持整表拉取）===
+[FAIL ] 仅 fields                                     -> ConnectionError: ('Connection aborted.', ConnectionResetError(10054, '远程主机强迫关闭了一个现有的连接。', None, 1
+
+=== 保险（L2 保险Ⅱ 801784.SI?）逐股对照 ===
+[OK   ] ts_code=601601.SH                            -> 1 行
+        601601.SH: 中国太保 L1=非银金融 L2=保险Ⅱ
+[OK   ] ts_code=601336.SH                            -> 1 行
+        601336.SH: 新华保险 L1=非银金融 L2=保险Ⅱ
+[OK   ] ts_code=000627.SZ                            -> 1 行
+        000627.SZ: *ST天茂(退市) L1=非银金融 L2=保险Ⅱ

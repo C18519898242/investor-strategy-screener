@@ -1,0 +1,31 @@
+=== A) stock_basic 参数组合 ===
+[FAIL ] stock_basic {'exchange': 'SSE', 'list_status': 'L'} | stock_basic {'exchange': 'SSE', 'list_status': 'L'} -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=d302e7561642471f8fda00cc3d45ee3c
+[FAIL ] stock_basic {'exchange': 'SZSE', 'list_status': 'L'} | stock_basic {'exchange': 'SZSE', 'list_status': 'L'} -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=f013d1ba69db4b07bcd7a1c2feece588
+[OK   ] stock_basic {'ts_code': '600519.SH'} | stock_basic {'ts_code': '600519.SH'} -> 1 行
+        字段: ts_code, symbol, name, area, industry, fullname, enname, cnspell, market, exchange, curr_type, list_status, list_date, delist_date, is_hs
+
+=== B) 停牌股是否仍在 daily_basic / daily 中 ===
+[OK   ] 停牌名单 | suspend_d {'trade_date': '20261016', 'suspend_type': 'S'} -> 10 行
+[OK   ] 每日指标 | daily_basic {'trade_date': '20261016', 'fields': 'ts_code,trade_date,close,total_mv'} -> 5567 行
+[OK   ] 日线行情 | daily {'trade_date': '20261016', 'fields': 'ts_code,trade_date,close'} -> 5567 行
+        停牌 10 只: ['000016.SZ', '002388.SZ', '002717.SZ', '002731.SZ', '300773.SZ', '301314.SZ', '600293.SH', '601059.SH', '601198.SH', '688496.SH']
+        daily_basic 中仍有记录: 0 只 []
+        daily 中仍有记录: 0 只 []
+
+=== C) 分红：显式取 base_share ===
+[FAIL ] 分红 | dividend {'ts_code': '600519.SH', 'fields': 'ts_code,end_date,ann_date,div_proc,cash_div_tax,base_share,ex_date,pay_date'} -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；request_id=df48283518904c26a1c3b831b83ae9cb
+
+=== D) 申万行业历史成分（is_new=N，按行业取）===
+[FAIL ] 行业 801780.SI 含历史 | index_member_all {'l1_code': '801780.SI', 'is_new': 'N'} -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=2bed6d3a4cf54b3186cc7e55abf4b9a8
+[FAIL ] 行业 801120.SI 含历史 | index_member_all {'l1_code': '801120.SI', 'is_new': 'N'} -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=52aa4b2a45a74c698f95a4a8ce617450
+
+=== E) ST 列表字段与取值 ===
+[OK   ] ST 列表 | stock_st {'trade_date': '20261016'} -> 201 行
+        字段: ts_code, name, trade_date, type, type_name
+        type 分布: {'ST': 201}
+        样例: [{"ts_code":"000010.SZ","name":"*ST美丽","trade_date":"20261016","type":"ST","type_name":"风险警示板"},{"ts_code":"000016.SZ","name":"*ST康佳A","trade_date":"20261016","type":"ST","type_name":"风险警示板"}]
+
+=== F) 退市股名单能否取到（用于股票池）===
+[OK   ] 退市股票 | stock_basic {'list_status': 'D', 'fields': 'ts_code,name,market,list_date,delist_date'} -> 339 行
+        market 取值: {'主板': 289, '创业板': 41, '北交所': 5, '科创板': 3}
+        样例: [{"ts_code":"000003.SZ","name":"PT金田A(退)","market":"主板","list_date":"19910703","delist_date":"20020614"},{"ts_code":"000004.SZ","name":"国华退","market":"主板","list_date":"19901201","delist_date":"20260714"}]

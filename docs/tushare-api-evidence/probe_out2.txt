@@ -1,0 +1,46 @@
+=== A) stock_basic：不带空 exchange 参数重试 ===
+[FAIL ] 上市股票(不传 exchange) | stock_basic {'list_status': 'L'} -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=76a3c061507d45aa901823102580f260
+[FAIL ] 上市股票(不传 exchange) | stock_basic {'list_status': 'L'} -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=407f3f576ab041f2b9f0c0e79af8dd20
+[FAIL ] list_status=D | stock_basic {'list_status': 'D'} -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=57eb878d4539462cb84320d470bae013
+[FAIL ] list_status=D | stock_basic {'list_status': 'D'} -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=1a337e5ceb2f45afb92aaeb72ca1f7de
+[FAIL ] list_status=P | stock_basic {'list_status': 'P'} -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=f347189725a64800b6a5bd80b0b51e05
+[FAIL ] list_status=P | stock_basic {'list_status': 'P'} -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=3bf3922f99164ea1b8cb1a9a66e18b44
+
+=== B) daily 全市场单日（加大超时后重试）===
+[OK   ] 日线行情 | daily {'trade_date': '20261016'} -> 5567 行 (21.4s)
+        字段: ts_code, trade_date, open, high, low, close, pre_close, change, pct_chg, vol, amount
+
+=== C) 停牌股在 daily_basic 里是否仍有记录（20261016）===
+[OK   ] 停牌名单 | suspend_d {'trade_date': '20261016', 'suspend_type': 'S'} -> 10 行 (1.4s)
+[FAIL ] 每日指标 | daily_basic {'trade_date': '20261016'} -> ConnectionError: HTTPSConnectionPool(host='tl.kaixin8.top', port=443): Read timed out.
+[FAIL ] 每日指标 | daily_basic {'trade_date': '20261016'} -> ConnectionError: HTTPSConnectionPool(host='tl.kaixin8.top', port=443): Read timed out.
+
+=== D) 申万行业分类：参数组合重试 ===
+[FAIL ] 行业分类(默认) | index_classify {} -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=e5bdb6baa5a546f68bfddab6ed78ca80
+[FAIL ] 行业分类(默认) | index_classify {} -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=f0e7fa383a294d5780f353cdf7b0b65f
+[FAIL ] 行业分类(src=SW2021) | index_classify {'src': 'SW2021'} -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=8177f2d938734cf6bf78c79e5944c09b
+[FAIL ] 行业分类(src=SW2021) | index_classify {'src': 'SW2021'} -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=1d2c6a71fa854b979154750c85787a65
+[FAIL ] 行业分类(level=L1) | index_classify {'level': 'L1'} -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=17a1705047c546e5bc77b29c9ee06954
+[FAIL ] 行业分类(level=L1) | index_classify {'level': 'L1'} -> Exception: [invalid_params] 业务参数缺失或格式不合法；request_id=2a4a8e9d2b814fb1b815393ef2135445
+[OK   ] 行业分类(level=L1,src=SW2021,只取字段) | index_classify {'level': 'L1', 'src': 'SW2021', 'fields': 'index_code,industry_name,level,src'} -> 31 行 (0.8s)
+[EMPTY] 行业成分(含历史 is_new=N) | index_member_all {'ts_code': '600519.SH', 'is_new': 'N'} -> 0 行 (4.4s)
+        样例: []
+
+=== E) ST 列表接口是否可用 ===
+[OK   ] ST 列表 | stock_st {'trade_date': '20261016'} -> 201 行 (1.5s)
+
+=== F) 单季利润表 4 个季度求和 vs 年报累计（600519.SH 2024）===
+[OK   ] 单季 20240331 | income {'ts_code': '600519.SH', 'period': '20240331', 'report_type': '2'} -> 1 行 (1.1s)
+        20240331 单季归母净利润 = 24,065,262,374 元
+[OK   ] 单季 20240630 | income {'ts_code': '600519.SH', 'period': '20240630', 'report_type': '2'} -> 1 行 (3.5s)
+        20240630 单季归母净利润 = 17,630,348,609 元
+[OK   ] 单季 20240930 | income {'ts_code': '600519.SH', 'period': '20240930', 'report_type': '2'} -> 1 行 (1.0s)
+        20240930 单季归母净利润 = 19,131,941,135 元
+[OK   ] 单季 20241231 | income {'ts_code': '600519.SH', 'period': '20241231', 'report_type': '2'} -> 1 行 (2.6s)
+        20241231 单季归母净利润 = 25,400,594,303 元
+[OK   ] 年报累计 20241231 | income {'ts_code': '600519.SH', 'period': '20241231'} -> 1 行 (0.7s)
+        4 个单季之和 = 86,228,146,422 元；年报累计 = 86,228,146,422 元；差 = 0 元
+
+=== G) 分红：显式取 base_share 并核对金额单位 ===
+[FAIL ] 分红(指定字段) | dividend {'ts_code': '600519.SH', 'fields': 'ts_code,end_date,ann_date,div_proc,cash_div,cash_div_tax,base_share,record_date,ex_date,pay_date'} -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；request_id=f45b50ef10ae4e2889a36f58313ce4a1
+[FAIL ] 分红(指定字段) | dividend {'ts_code': '600519.SH', 'fields': 'ts_code,end_date,ann_date,div_proc,cash_div,cash_div_tax,base_share,record_date,ex_date,pay_date'} -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；request_id=61567953742a41a89450cecf0021688d

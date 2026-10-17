@@ -1,0 +1,33 @@
+=== A) 申万行业：银行 / 保险 / 证券 落在哪一级 ===
+[OK   ] 工商银行 601398.SH                     -> 1 行
+        工商银行: L1=银行 / L2=国有大型银行Ⅱ / L3=国有大型银行Ⅲ
+[OK   ] 中国平安 601318.SH                     -> 1 行
+        中国平安: L1=非银金融 / L2=保险Ⅱ / L3=保险Ⅲ
+[OK   ] 中信证券 600030.SH                     -> 1 行
+        中信证券: L1=非银金融 / L2=证券Ⅱ / L3=证券Ⅲ
+[OK   ] 万科A 000002.SZ                      -> 1 行
+        万科A: L1=房地产 / L2=房地产开发 / L3=住宅开发
+
+=== B) 历史行情覆盖（取价用）===
+[OK   ] daily_basic 20241231               -> 5370 行
+        20241231 字段: ['ts_code', 'close', 'total_mv']
+[OK   ] daily_basic 20201231               -> 4119 行
+        20201231 字段: ['ts_code', 'close', 'total_mv']
+[OK   ] daily_basic 20151231               -> 2545 行
+        20151231 字段: ['ts_code', 'close', 'total_mv']
+
+=== C) 交易日历 pretrade_date 是否可用 ===
+[OK   ] trade_cal                          -> 16 行
+        exchange cal_date  is_open pretrade_date
+             SSE 20261013        1      20261012
+             SSE 20261014        1      20261013
+             SSE 20261015        1      20261014
+             SSE 20261016        1      20261015
+
+=== D) dividend 取 base_share（重试）===
+[FAIL ] dividend + base_share              -> Exception: [upstream_pool_exhausted] 数据当前不可用，请稍后重试；request_id=3d909d2eca3a489799ecf01f29ae3430
+
+=== E) income 按公告日分段的安全区间 ===
+[OK   ] income 公告日 20240101~20241231       -> 4 行
+[OK   ] income 公告日 20240101~20240630       -> 2 行
+[OK   ] income 公告日 20240101~20240331       -> 1 行
