@@ -267,7 +267,7 @@ E09-8: 总市值 > 100 亿元
 
 先按数据源字段定义判断是否与对应策略口径一致；一致的现成字段直接使用，口径不同的指标按该策略公式从原始数据计算。第 1 集缺少任一必要原始数据时直接排除股票，不输出落选记录。字段选择、单位换算和实现验证属于开发工作，不作为待用户回答的需求。以下映射依据 [Tushare 每日指标](https://tushare.pro/document/2?doc_id=32)、[资产负债表](https://tushare.pro/document/2?doc_id=36)、[利润表](https://tushare.pro/document/2?doc_id=33)、[财务指标](https://tushare.pro/document/2?doc_id=79)及[分红数据](https://tushare.pro/document/2?doc_id=103)的字段说明；详见[数据源复核报告](sources/data-source-evaluation.md)。
 
-历史日期按本次运行本地已有的数据重算，不按公告日还原当时信息；同一日期日后重算结果可能变化。接口权限、覆盖范围和缺失数据仍须在实际接入时验证。
+历史日期按本次运行本地已有的数据重算，不按公告日还原当时信息；同一日期日后重算结果可能变化。接口权限、覆盖范围、缺失数据、调用限制及各接口的字段与单位已有[第 1 集 Tushare 接口实测评估](docs/tushare-api-evaluation.md)；该报告未覆盖的待验证项见其第 8 节。
 
 ## 字段映射与使用章节
 
