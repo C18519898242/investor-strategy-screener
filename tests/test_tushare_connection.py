@@ -69,9 +69,7 @@ class TushareConnectionTest(unittest.TestCase):
         calls = []
         install_fake_tushare(calls)
 
-        with self.assertRaisesRegex(
-            SyncError, "缺少 TUSHARE_TOKEN，请在 .env 或环境变量中设置"
-        ):
+        with self.assertRaisesRegex(SyncError, "缺少 TUSHARE_TOKEN，请在 .env 或环境变量中设置"):
             create_tushare_client(settings(tushare_token=""))
 
         self.assertEqual(calls, [])
@@ -80,9 +78,7 @@ class TushareConnectionTest(unittest.TestCase):
         calls = []
         install_fake_tushare(calls)
 
-        with self.assertRaisesRegex(
-            SyncError, "缺少 TUSHARE_API_URL，请在 .env 或环境变量中设置"
-        ):
+        with self.assertRaisesRegex(SyncError, "缺少 TUSHARE_API_URL，请在 .env 或环境变量中设置"):
             create_tushare_client(settings(tushare_api_url=""))
 
         self.assertEqual(calls, [])

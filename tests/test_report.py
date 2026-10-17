@@ -50,8 +50,12 @@ class ReportTest(unittest.TestCase):
 
     def test_same_timestamp_adds_sequence_without_overwrite(self):
         generated_at = dt.datetime(2026, 10, 11, 18, 5, 21)
-        first = write_result(self.root, output_dir="episode-01-graham", generated_at=generated_at, html="first")
-        second = write_result(self.root, output_dir="episode-01-graham", generated_at=generated_at, html="second")
+        first = write_result(
+            self.root, output_dir="episode-01-graham", generated_at=generated_at, html="first"
+        )
+        second = write_result(
+            self.root, output_dir="episode-01-graham", generated_at=generated_at, html="second"
+        )
 
         self.assertEqual(first.name, "screen-20261011-180521.html")
         self.assertEqual(second.name, "screen-20261011-180521-2.html")

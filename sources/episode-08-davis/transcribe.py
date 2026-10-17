@@ -37,10 +37,16 @@ def main() -> int:
     ap.add_argument("--language", default=None)
     ap.add_argument("--beam-size", type=int, default=5)
     ap.add_argument("--temperature", type=float, default=0.0)
-    ap.add_argument("--word-timestamps", action="store_true",
-                    help="per-word/character timings in the JSON (negligible speed cost)")
-    ap.add_argument("--vad-filter", action="store_true",
-                    help="enable Silero VAD; no effect on clean narration, see out/param-matrix")
+    ap.add_argument(
+        "--word-timestamps",
+        action="store_true",
+        help="per-word/character timings in the JSON (negligible speed cost)",
+    )
+    ap.add_argument(
+        "--vad-filter",
+        action="store_true",
+        help="enable Silero VAD; no effect on clean narration, see out/param-matrix",
+    )
     args = ap.parse_args()
 
     import av
@@ -63,7 +69,7 @@ def main() -> int:
 
     start = max(0.0, args.start)
     stop = min(total_s, start + args.duration) if args.duration > 0 else total_s
-    clip = audio[int(start * 16000): int(stop * 16000)]
+    clip = audio[int(start * 16000) : int(stop * 16000)]
     clip_s = len(clip) / 16000.0
     print(f"clip         : {start:.2f} s -> {stop:.2f} s ({clip_s:.2f} s, {len(clip)} samples)")
 
@@ -87,8 +93,10 @@ def main() -> int:
 
     print(f"language     : {info.language} (p={info.language_probability:.2f})")
     print(f"duration     : {info.duration:.2f} s (model view)")
-    print(f"inference    : {infer_s:.2f} s -> RTF {infer_s / clip_s:.3f}x "
-          f"({clip_s / infer_s:.1f}x realtime)")
+    print(
+        f"inference    : {infer_s:.2f} s -> RTF {infer_s / clip_s:.3f}x "
+        f"({clip_s / infer_s:.1f}x realtime)"
+    )
     print("-" * 72)
     for s in segments:
         print(f"[{s.start:7.2f} -> {s.end:7.2f}] {s.text.strip()}")
@@ -128,10 +136,12 @@ def main() -> int:
                         "end": s.end,
                         "text": s.text.strip(),
                         **(
-                            {"words": [
-                                {"w": w.word, "start": w.start, "end": w.end}
-                                for w in (s.words or [])
-                            ]}
+                            {
+                                "words": [
+                                    {"w": w.word, "start": w.start, "end": w.end}
+                                    for w in (s.words or [])
+                                ]
+                            }
                             if args.word_timestamps
                             else {}
                         ),

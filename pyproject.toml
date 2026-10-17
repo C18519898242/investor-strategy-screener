@@ -1,0 +1,40 @@
+[project]
+name = "investor-strategy-screener"
+version = "0.1.0"
+description = "按视频中的 A 股选股规则筛选股票的本机命令行程序"
+requires-python = ">=3.13"
+dependencies = [
+    "pandas>=2.2",
+    "pydantic-settings>=2.0",
+    "tushare>=1.4",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.8",
+]
+
+# 本机工具，不做成可安装包：uv 只准备 .venv 与依赖，程序入口仍是 python main.py。
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+# 测试用标准库 unittest 编写，pytest 直接收集运行，不需要改写测试。
+addopts = "-q"
+# 临时产物统一放在 test-temp/（已忽略），仓库根目录保持干净。
+cache_dir = "test-temp/.pytest_cache"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+# 文档里的 Python 片段是示例（含历史写法），只检查与格式化真正的 .py 文件。
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.format]
+quote-style = "double"

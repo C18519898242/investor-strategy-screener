@@ -6,7 +6,6 @@ from screener.config import Settings
 from screener.store import last_successful_sync_at, open_database, published_datasets
 from screener.sync import SyncError, sync_all
 
-
 PROXY_URL = "https://tl.kaixin8.top/tushare/sdk"
 
 

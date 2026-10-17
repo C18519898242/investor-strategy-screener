@@ -69,9 +69,11 @@ def _sync_menu(connection, strategies, settings, fetch, clock, input_fn, output_
     choice = input_fn("请选择：")
     if choice != "1":
         return 0
-    datasets = tuple(dict.fromkeys(
-        dataset for strategy in strategies for dataset in strategy.spec.required_datasets
-    ))
+    datasets = tuple(
+        dict.fromkeys(
+            dataset for strategy in strategies for dataset in strategy.spec.required_datasets
+        )
+    )
     output_fn("更新范围：所有已实现策略所需的数据")
     output_fn("正在更新共用数据，并补充策略专用数据（如有）……")
     try:

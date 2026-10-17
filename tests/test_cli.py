@@ -9,7 +9,6 @@ from screener.config import Settings
 from screener.store import begin_sync, open_database
 from screener.strategies.base import Strategy, StrategySpec
 
-
 PROXY_URL = "https://tl.kaixin8.top/tushare/sdk"
 
 

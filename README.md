@@ -43,6 +43,36 @@ sources/
 
 视频资料目录中的 `full.srt`、`full.txt`、`full.json` 是自动转写，`frame-*.png` 是画面截图，`verification.md` 是结合口播和画面的核对记录。自动转写未经逐字人工校对，核对阈值时应优先查看画面与核对记录。原始 MP4 不在仓库中，视频格式已由 [.gitignore](.gitignore) 排除。
 
+## 开发环境
+
+项目用 [uv](https://docs.astral.sh/uv/) 准备 Python 环境与依赖。`.python-version` 固定 Python 3.13（本机没有时 uv 会自行下载），`uv.lock` 锁定依赖版本。
+
+把这台电脑或另一台电脑上的仓库准备好后，在项目目录执行下面一条命令即可：uv 会自动创建 `.venv`、安装锁定版本的依赖并启动程序，不需要先手工建环境或装依赖。
+
+```bash
+uv run --locked python main.py
+```
+
+常用命令（都需要在项目目录执行）：
+
+```bash
+uv run --locked python main.py     # 进入菜单
+uv run --locked pytest             # 运行全部测试
+uv run --locked ruff check .       # 代码检查
+uv run --locked ruff format .      # 代码格式化
+```
+
+测试用标准库 `unittest` 编写，`pytest` 只是运行器，不改写测试代码。
+
+个人配置（Tushare Token 与请求地址）写在仓库根目录的 `.env`，不提交、每台电脑各自设置一次；模板见 [.env.example](.env.example)。也可以用同名真实环境变量，其优先级高于 `.env`。两项都缺时，更新本地数据会一次报出缺少的名字。
+
+```dotenv
+TUSHARE_TOKEN=你的token
+TUSHARE_API_URL=https://tl.kaixin8.top/tushare/sdk
+```
+
+改动依赖后：编辑 `pyproject.toml`，执行 `uv lock` 更新锁文件，并把 `uv.lock` 一并提交。
+
 ## 项目约束
 
 筛选或重算只读取本地已保存数据；数据更新另行执行。所有策略共用的日期行为和结果交付见 [产品需求](product.md)。

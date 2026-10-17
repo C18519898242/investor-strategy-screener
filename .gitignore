@@ -12,3 +12,15 @@ data/*.sqlite3
 outputs/
 test-temp/
 
+# 本机环境与工具缓存，不提交。
+.venv/
+.uv-cache/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# 本机 IDE 配置与临时目录，不提交。
+.idea/
+.tmp-tushare/
+tmp*/
+
