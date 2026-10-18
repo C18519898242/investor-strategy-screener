@@ -75,6 +75,20 @@ class SuspendDTest(unittest.TestCase):
             [("20211001",), ("20211005",)],
         )
 
+    def test_water_level_after_today_deletes_nothing_and_writes_nothing(self):
+        client = FakeClient([row("20261020")])
+        fetch_suspend_d(self.connection, client, today=date(2026, 10, 25))
+        client.calls.clear()
+
+        count = fetch_suspend_d(self.connection, client, today=date(2026, 10, 18))
+
+        self.assertEqual(count, 0)
+        self.assertEqual(client.calls, [])
+        self.assertEqual(
+            self.connection.execute("SELECT trade_date FROM suspend_d").fetchall(),
+            [("20261020",)],
+        )
+
     def test_rows_are_written_in_trade_date_order(self):
         client = FakeClient([row("20261003"), row("20261001"), row("20261002")])
 

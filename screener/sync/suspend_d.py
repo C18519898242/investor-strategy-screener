@@ -17,13 +17,20 @@ BACK_YEARS = 11
 def fetch_suspend_d(
     connection: sqlite3.Connection, client: object, *, today: date | None = None
 ) -> int:
-    """从水位那天起按 27 天分段补到今天：水位那天的旧行先删掉再重写。"""
+    """从水位那天起按 27 天分段补到今天：水位那天的旧行先删掉再重写。
+
+    水位晚于今天时什么都不做——那种水位只可能来自上游返回的未来日期，
+    删掉它又不重取，等于白丢一天的数据。
+    """
     end = today or date.today()
     water = connection.execute("SELECT MAX(trade_date) FROM suspend_d").fetchone()[0]
     if water is None:
         start = end.replace(year=end.year - BACK_YEARS)
     else:
         start = datetime.strptime(water, "%Y%m%d").date()
+        if start > end:
+            logger.debug("suspend_d 水位 %s 晚于今天 %s，不删也不补", water, end.strftime("%Y%m%d"))
+            return 0
         logger.debug("suspend_d 水位 %s，先删掉那天的旧行", water)
         delete_rows(connection, table="suspend_d", column="trade_date", value=water)
 
