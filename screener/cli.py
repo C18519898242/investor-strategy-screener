@@ -10,7 +10,7 @@ from screener.logging import setup_logging
 from screener.report import render_html, write_result
 from screener.store import last_successful_sync_at, published_datasets
 from screener.strategies import Strategy, load_builtin_strategies
-from screener.sync import fetch_datasets, sync_all
+from screener.sync import dataset_water_levels, fetch_datasets, sync_all
 
 logger = logging.getLogger(__name__)
 
@@ -82,10 +82,26 @@ def _sync_menu(connection, strategies, settings, fetch, clock, input_fn, output_
         )
     )
     logger.info("更新范围：%s", "、".join(datasets))
+    levels = dataset_water_levels(connection, datasets)
+    output_fn(f"本次要更新 {len(datasets)} 个数据集：")
+    for index, dataset in enumerate(datasets, start=1):
+        output_fn(f"  {index}. {dataset}（{levels[dataset]}）")
+    skipped = _ask_skips(input_fn, output_fn, len(datasets))
+    selected = tuple(
+        dataset for index, dataset in enumerate(datasets, start=1) if index not in skipped
+    )
+    if not selected:
+        output_fn("没有要更新的数据集")
+        return 0
+    if skipped:
+        skipped_names = [
+            dataset for index, dataset in enumerate(datasets, start=1) if index in skipped
+        ]
+        logger.info("本次跳过：%s", "、".join(skipped_names))
     try:
         sync_all(
             connection,
-            datasets=datasets,
+            datasets=selected,
             settings=settings,
             fetch=fetch,
             clock=clock,
@@ -95,6 +111,26 @@ def _sync_menu(connection, strategies, settings, fetch, clock, input_fn, output_
         return 1
     input_fn("按回车返回主菜单")
     return 0
+
+
+def _ask_skips(input_fn, output_fn, count: int) -> set[int]:
+    """问一次这次不补哪几个数据集；回车＝一个都不跳，编号非法就再问一遍。"""
+    while True:
+        answer = input_fn("不补哪几个（编号用空格或逗号分隔；直接回车＝全都补）：")
+        try:
+            return _parse_skips(answer, count)
+        except ValueError as error:
+            output_fn(str(error))
+
+
+def _parse_skips(answer: str, count: int) -> set[int]:
+    """把「2 3」「2,3」「2，3」解析成编号集合；空输入＝空集合。"""
+    skips = set()
+    for token in answer.replace(",", " ").replace("，", " ").split():
+        if not token.isdigit() or not 1 <= int(token) <= count:
+            raise ValueError(f"编号应为 1~{count} 之间的数字")
+        skips.add(int(token))
+    return skips
 
 
 def _screen_menu(connection, strategies, output_root, input_fn, output_fn) -> int:

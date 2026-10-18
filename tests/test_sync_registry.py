@@ -4,7 +4,12 @@ from pathlib import Path
 
 from screener.store import open_database
 from screener.sync.errors import SyncError
-from screener.sync.registry import fetch_datasets
+from screener.sync.registry import (
+    DATASET_FETCHERS,
+    WATER_QUERIES,
+    dataset_water_levels,
+    fetch_datasets,
+)
 from tests.tushare_fakes import FakeTushareClient, stock_basic_row
 
 TRADE_CAL_ROWS = [{"exchange": "SSE", "cal_date": "20261016", "is_open": 1, "pretrade_date": ""}]
@@ -63,3 +68,26 @@ class RegistryTest(unittest.TestCase):
         with self.assertNoLogs("screener.sync.registry", level="INFO"):
             with self.assertRaisesRegex(SyncError, "未登记的数据名：不存在的数据"):
                 fetch_datasets(self.connection, ("不存在的数据",), fake_client())
+
+    def test_water_levels_name_the_snapshot_and_the_incremental_datasets(self):
+        fetch_datasets(self.connection, ("股票列表", "交易日历", "停复牌"), fake_client())
+
+        levels = dataset_water_levels(self.connection, ("股票列表", "交易日历", "停复牌"))
+
+        self.assertEqual(
+            levels,
+            {"股票列表": "整表替换", "交易日历": "水位 20261016", "停复牌": "水位 20261016"},
+        )
+
+    def test_water_levels_say_a_dataset_has_no_rows_yet(self):
+        levels = dataset_water_levels(self.connection, ("交易日历", "停复牌"))
+
+        self.assertEqual(levels, {"交易日历": "无数据，首次全量", "停复牌": "无数据，首次全量"})
+
+    def test_water_levels_do_not_raise_for_an_unregistered_name(self):
+        levels = dataset_water_levels(self.connection, ("不存在的数据",))
+
+        self.assertEqual(levels, {"不存在的数据": "未登记"})
+
+    def test_every_registered_dataset_has_a_water_query(self):
+        self.assertEqual(set(WATER_QUERIES), set(DATASET_FETCHERS))

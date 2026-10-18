@@ -18,6 +18,33 @@ DATASET_FETCHERS: dict[str, Callable[[sqlite3.Connection, object], int]] = {
     SUSPEND_D_DATASET: fetch_suspend_d,
 }
 
+# 每个数据集的水位查询；整表替换的数据集写 None。键必须与 DATASET_FETCHERS 一致。
+WATER_QUERIES: dict[str, str | None] = {
+    STOCK_BASIC_DATASET: None,
+    TRADE_CAL_DATASET: "SELECT MAX(cal_date) FROM trade_cal",
+    SUSPEND_D_DATASET: "SELECT MAX(trade_date) FROM suspend_d",
+}
+
+
+def dataset_water_levels(
+    connection: sqlite3.Connection, datasets: tuple[str, ...]
+) -> Mapping[str, str]:
+    """给每个数据集一句人话的水位，供更新前确认要跳过谁。
+
+    未登记的数据名照实说，不在这里报错——报错留给真正抓取时的 `fetch_datasets`。
+    """
+    levels = {}
+    for dataset in datasets:
+        query = WATER_QUERIES.get(dataset)
+        if dataset not in DATASET_FETCHERS:
+            levels[dataset] = "未登记"
+        elif query is None:
+            levels[dataset] = "整表替换"
+        else:
+            water = connection.execute(query).fetchone()[0]
+            levels[dataset] = "无数据，首次全量" if water is None else f"水位 {water}"
+    return levels
+
 
 def fetch_datasets(
     connection: sqlite3.Connection, datasets: tuple[str, ...], client: object

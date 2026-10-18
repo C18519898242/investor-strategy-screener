@@ -52,6 +52,8 @@ class MenuTest(unittest.TestCase):
         self.log_file = self.root / "logs" / "screener.log"
         self.output = []
         self.fetch_calls = 0
+        self.fetched = []
+        self.prompts = []
 
     def tearDown(self):
         shutdown_logging()
@@ -62,6 +64,7 @@ class MenuTest(unittest.TestCase):
         values = iter(answers)
 
         def answer(prompt=""):
+            self.prompts.append(prompt)
             try:
                 return next(values)
             except StopIteration:
@@ -81,7 +84,45 @@ class MenuTest(unittest.TestCase):
 
     def _fetch(self, connection, datasets, client):
         self.fetch_calls += 1
+        self.fetched.append(datasets)
         return {dataset: 3 for dataset in datasets}
+
+    def test_blank_answer_fetches_every_dataset(self):
+        self._run(["1", "1", ""])
+
+        self.assertIn("直接回车＝全都补", "\n".join(self.prompts))
+        self.assertEqual(self.fetched, [("prices", "financials")])
+
+    def test_skip_number_leaves_that_dataset_out(self):
+        self._run(["1", "1", "2", ""])
+
+        self.assertEqual(self.fetched, [("prices",)])
+
+    def test_skip_accepts_spaces_commas_and_full_width_commas(self):
+        self._run(["1", "1", "2，", ""])
+
+        self.assertEqual(self.fetched, [("prices",)])
+
+    def test_invalid_skip_number_is_asked_again(self):
+        self._run(["1", "1", "9", "1", ""])
+
+        self.assertEqual(self.fetched, [("financials",)])
+        self.assertIn("编号应为 1~2 之间的数字", "\n".join(self.output))
+
+    def test_skipping_every_dataset_fetches_nothing(self):
+        code = self._run(["1", "1", "1 2"])
+
+        self.assertEqual(code, 0)
+        self.assertEqual(self.fetched, [])
+        self.assertIn("没有要更新的数据集", "\n".join(self.output))
+
+    def test_the_checklist_names_every_dataset(self):
+        self._run(["1", "1", ""])
+
+        text = "\n".join(self.output)
+        self.assertIn("本次要更新 2 个数据集", text)
+        self.assertIn("  1. prices（未登记）", text)
+        self.assertIn("  2. financials（未登记）", text)
 
     def test_blank_trade_date_reports_missing_calendar(self):
         self._run(["2", "1", ""])
