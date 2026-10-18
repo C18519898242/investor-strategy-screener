@@ -152,6 +152,13 @@ class RawTablesTest(unittest.TestCase):
             [("000001.SZ", "20261015")],
         )
 
+    def test_the_connection_trades_durability_for_speed(self):
+        # autocommit 下每行一次提交。没有这两个 pragma 时写 8314 行要 66.8 秒，
+        # 有它是 0.27 秒（2026-10-18 实测）—— 回填会慢 250 倍。
+        # 代价是提交不 fsync：进程崩溃不丢，断电可能丢最后几笔。
+        self.assertEqual(self.connection.execute("PRAGMA journal_mode").fetchone(), ("wal",))
+        self.assertEqual(self.connection.execute("PRAGMA synchronous").fetchone(), (1,))
+
     def test_insert_rows_is_repeatable_on_an_empty_day(self):
         rows = [("000001.SZ", "20261016", None, "S")]
         insert_rows(self.connection, table="suspend_d", columns=SUSPEND_D_COLUMNS, rows=rows)

@@ -43,6 +43,7 @@ def fetch_suspend_d(
         chunk_end = min(chunk_start + timedelta(days=CHUNK_DAYS - 1), end)
         start_text = chunk_start.strftime("%Y%m%d")
         end_text = chunk_end.strftime("%Y%m%d")
+        logger.info("停复牌 第 %d/%d 段：%s ~ %s", index, total, start_text, end_text)
         logger.debug("suspend_d 请求：%s ~ %s", start_text, end_text)
         started = time.perf_counter()
         frame = call_with_retry(
@@ -63,7 +64,6 @@ def fetch_suspend_d(
             columns=COLUMNS,
             rows=rows.itertuples(index=False, name=None),
         )
-        logger.info("停复牌 已补到 %s（第 %d/%d 段）", end_text, index, total)
         chunk_start = chunk_end + timedelta(days=1)
 
     return written

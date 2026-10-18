@@ -1,3 +1,4 @@
+import logging
 import shutil
 import sqlite3
 import unittest
@@ -73,21 +74,36 @@ class SuspendDTest(unittest.TestCase):
         self.assertEqual(len(client.calls), 149)
         self.assertNotIn("suspend_type", client.calls[0])
 
-    def test_every_chunk_reports_progress_on_the_console(self):
-        client = FakeClient()
+    def test_every_chunk_is_announced_before_its_request(self):
+        timeline = []
 
+        class Recorder(logging.Handler):
+            def emit(self, record):
+                timeline.append(("log", record.getMessage()))
+
+        client = FakeClient()
+        request = client.suspend_d
+
+        def recording_request(**params):
+            timeline.append(("fetch", params["start_date"]))
+            return request(**params)
+
+        client.suspend_d = recording_request
+        logger = logging.getLogger("screener.sync.suspend_d")
+        recorder = Recorder()
         with self.assertLogs("screener.sync.suspend_d", level="INFO") as captured:
-            fetch_suspend_d(self.connection, client, today=date(2026, 10, 18))
+            logger.addHandler(recorder)
+            try:
+                fetch_suspend_d(self.connection, client, today=date(2026, 10, 18))
+            finally:
+                logger.removeHandler(recorder)
 
         self.assertEqual(len(captured.output), 149)
-        self.assertEqual(
-            captured.output[0],
-            "INFO:screener.sync.suspend_d:停复牌 已补到 20151113（第 1/149 段）",
-        )
-        self.assertEqual(
-            captured.output[-1],
-            "INFO:screener.sync.suspend_d:停复牌 已补到 20261018（第 149/149 段）",
-        )
+        self.assertEqual(timeline[0], ("log", "停复牌 第 1/149 段：20151018 ~ 20151113"))
+        self.assertEqual(timeline[1], ("fetch", "20151018"))
+        self.assertEqual(timeline[-2], ("log", "停复牌 第 149/149 段：20260926 ~ 20261018"))
+        self.assertEqual(timeline[-1], ("fetch", "20260926"))
+        self.assertEqual(len(timeline), 298)
 
     def test_chunks_written_before_an_interruption_stay_on_disk(self):
         client = InterruptingClient([row("20151020")], interrupt_on=3)

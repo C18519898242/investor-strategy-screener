@@ -34,6 +34,10 @@ def open_database(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     # autocommit：不引入事务。中断只留下「已写前缀」，重跑一遍覆盖掉。
     connection = sqlite3.connect(path, isolation_level=None)
+    # autocommit 是每行一次提交，默认 synchronous=FULL 会让每次提交都 fsync：
+    # 写 8314 行要 66.8 秒，加这两行是 0.27 秒（2026-10-18 实测）。
+    connection.execute("PRAGMA journal_mode=WAL")
+    connection.execute("PRAGMA synchronous=NORMAL")
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS sync_batch (
