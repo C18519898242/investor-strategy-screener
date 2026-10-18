@@ -10,6 +10,7 @@
 
 import pandas as pd
 
+from screener.sync.daily_basic import COLUMNS as DAILY_BASIC_COLUMNS
 from screener.sync.stock_basic import COLUMNS as STOCK_BASIC_COLUMNS
 
 STOCK_BASIC_FIELD_LIMIT = 13
@@ -20,13 +21,31 @@ def stock_basic_row(**overrides):
     return {**dict.fromkeys(STOCK_BASIC_COLUMNS, ""), **overrides}
 
 
+def daily_basic_row(**overrides):
+    """一行 daily_basic 的 18 列，默认全是 0.0，ts_code/trade_date 留空串。"""
+    return {
+        **dict.fromkeys(DAILY_BASIC_COLUMNS, 0.0),
+        "ts_code": "",
+        "trade_date": "",
+        **overrides,
+    }
+
+
 class FakeTushareClient:
     """按 `fields` 裁剪列的假客户端，不联网。"""
 
-    def __init__(self, *, stock_basic_rows=(), trade_cal_rows=(), suspend_d_rows=()):
+    def __init__(
+        self,
+        *,
+        stock_basic_rows=(),
+        trade_cal_rows=(),
+        suspend_d_rows=(),
+        daily_basic_rows=(),
+    ):
         self.stock_basic_rows = list(stock_basic_rows)
         self.trade_cal_rows = list(trade_cal_rows)
         self.suspend_d_rows = list(suspend_d_rows)
+        self.daily_basic_rows = list(daily_basic_rows)
         self.calls = []
 
     def stock_basic(self, **params):
@@ -44,6 +63,13 @@ class FakeTushareClient:
             row
             for row in self.suspend_d_rows
             if params["start_date"] <= row["trade_date"] <= params["end_date"]
+        ]
+        return self._slice(picked, fields)
+
+    def daily_basic(self, **params):
+        fields = self._record("daily_basic", params)
+        picked = [
+            row for row in self.daily_basic_rows if row["trade_date"] == params["trade_date"]
         ]
         return self._slice(picked, fields)
 

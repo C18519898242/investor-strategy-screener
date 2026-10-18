@@ -95,6 +95,7 @@ class MenuTest(unittest.TestCase):
         self.assertIn("1. 股票列表（整表替换）", text)
         self.assertIn("2. 交易日历（无数据，首次全量）", text)
         self.assertIn("3. 停复牌（无数据，首次全量）", text)
+        self.assertIn("4. 每日指标（无数据，首次全量）", text)
         self.assertIn("0. 返回主菜单", text)
         self.assertNotIn("prices", text)
 
@@ -117,7 +118,7 @@ class MenuTest(unittest.TestCase):
         self._run(["1", "9", "2", "", "0"])
 
         self.assertEqual(self.fetched, [("交易日历",)])
-        self.assertIn("编号应为 0~3 之间的数字", "\n".join(self.output))
+        self.assertIn("编号应为 0~4 之间的数字", "\n".join(self.output))
 
     def test_zero_at_the_dataset_menu_returns_without_fetching(self):
         code = self._run(["1", "0"])
