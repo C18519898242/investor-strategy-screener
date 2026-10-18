@@ -144,6 +144,53 @@ class DailyBasicTest(unittest.TestCase):
         self.assertEqual(count, 0)
         self.assertEqual(client.calls, [])
 
+    def test_the_water_day_survives_when_the_calendar_cannot_confirm_it(self):
+        """日历为空（比如「交易日历」同步被中断）时，水位那天不能删。
+
+        删掉它等于白丢一天：待补集合是从日历算出来的，日历为空就补不回来，
+        而这一轮还会被记成成功。
+        """
+        insert_rows(
+            self.connection,
+            table="daily_basic",
+            columns=COLUMNS,
+            rows=[values("20261013")],
+        )
+        self.connection.execute("DELETE FROM trade_cal")
+        client = FakeClient()
+
+        count = fetch_daily_basic(self.connection, client, today=TODAY)
+
+        self.assertEqual(count, 0)
+        self.assertEqual(client.calls, [])
+        self.assertEqual(self._trading_days(), ["20261013"])
+
+    def test_the_water_day_survives_when_it_is_later_than_today(self):
+        """水位晚于今天时不能删：删了它也补不回来（`cal_date <= 今天` 排除了它）。"""
+        insert_rows(
+            self.connection,
+            table="daily_basic",
+            columns=COLUMNS,
+            rows=[
+                values(day)
+                for day in (
+                    "20261012",
+                    "20261013",
+                    "20261014",
+                    "20261015",
+                    "20261016",
+                    "20261019",
+                )
+            ],
+        )
+        client = FakeClient()
+
+        count = fetch_daily_basic(self.connection, client, today=TODAY)
+
+        self.assertEqual(count, 0)
+        self.assertEqual(client.calls, [])
+        self.assertEqual(self._trading_days()[-1], "20261019")
+
     def test_the_calendar_end_caps_the_backfill(self):
         self.connection.execute("DELETE FROM trade_cal WHERE cal_date > '20261013'")
         client = FakeClient()

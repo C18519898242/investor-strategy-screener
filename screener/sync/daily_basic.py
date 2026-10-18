@@ -31,6 +31,19 @@ COLUMNS: tuple[str, ...] = (
 )
 
 
+def _is_open_day(connection: sqlite3.Connection, trade_date: str, end: str) -> bool:
+    """日历确认这天是交易日、且不晚于 end。
+
+    只有这种水位删掉之后才会回到待补集合：待补集合是从日历算出来的，日历为空
+    或不完整、水位又是上游返回的未来日期时，删掉它就是白丢一天的数据。
+    """
+    row = connection.execute(
+        "SELECT 1 FROM trade_cal WHERE is_open = 1 AND cal_date = ? AND cal_date <= ?",
+        (trade_date, end),
+    ).fetchone()
+    return row is not None
+
+
 def fetch_daily_basic(
     connection: sqlite3.Connection, client: object, *, today: date | None = None
 ) -> int:
@@ -38,12 +51,18 @@ def fetch_daily_basic(
 
     待补集合是「日历里的交易日」减去「库里已有行的日期」，所以水位以下没有行的
     交易日也会补上，中间的空洞不会永久留下。日历为空时什么都不拉，也不报错。
+
+    水位那天只有在日历确认它是交易日时才删（照 `suspend_d` 的守卫）：否则删掉它
+    等于白丢一天，日历算不出它，这一轮也不会重取。
     """
     end = (today or date.today()).strftime("%Y%m%d")
     water = connection.execute("SELECT MAX(trade_date) FROM daily_basic").fetchone()[0]
     if water is not None:
-        logger.debug("daily_basic 水位 %s，先删掉那天的旧行", water)
-        delete_rows(connection, table="daily_basic", column="trade_date", value=water)
+        if _is_open_day(connection, water, end):
+            logger.debug("daily_basic 水位 %s，先删掉那天的旧行", water)
+            delete_rows(connection, table="daily_basic", column="trade_date", value=water)
+        else:
+            logger.debug("daily_basic 水位 %s 不在日历里或晚于 %s，不删也不补", water, end)
 
     days = [
         row[0]

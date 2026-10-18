@@ -104,6 +104,11 @@ class MenuTest(unittest.TestCase):
 
         self.assertEqual(self.fetched, [("交易日历",)])
 
+    def test_the_fourth_entry_maps_to_the_daily_basic_dataset(self):
+        self._run(["1", "4", "", "0"])
+
+        self.assertEqual(self.fetched, [("每日指标",)])
+
     def test_picking_two_datasets_fetches_each_one(self):
         self._run(["1", "1", "", "2", "", "0"])
 
