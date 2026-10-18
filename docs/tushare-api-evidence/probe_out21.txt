@@ -1,0 +1,13 @@
+=== 等 35 秒，让上一轮的 rate_limited 过去 ===
+=== 健康检查 ===
+        健康检查成功
+
+=== 0 行响应：列还在不在（2026-10-17/18 是周六周日）===
+    trade_date=20261017 -> 0 行
+        columns = ['ts_code', 'trade_date', 'suspend_timing', 'suspend_type']
+        ^ 空响应列齐全：frame[list(COLUMNS)] 安全
+    trade_date=20261018 -> 0 行
+        columns = ['ts_code', 'trade_date', 'suspend_timing', 'suspend_type']
+        ^ 空响应列齐全：frame[list(COLUMNS)] 安全
+
+探针结束。

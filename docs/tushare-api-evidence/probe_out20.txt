@@ -1,0 +1,38 @@
+=== 健康检查 ===
+        健康检查成功
+
+=== 1) 27 天区间：跨月与月内各测几个 ===
+    对照：2015-11 整月 30 天 7673 行、2016-03 整月 31 天 6656 行（第十九轮实测）
+[OK   ] 月内 20151101-20151127               ->   7347 行    6.2s
+        期望约 6900 行 -> 实际 7347 行，未触顶
+[OK   ] 跨月 20151110-20151206               ->   6525 行    5.4s
+        期望约 6000 行 -> 实际 6525 行，未触顶
+[OK   ] 月内 20160301-20160327               ->   5410 行    4.1s
+        期望约 5800 行 -> 实际 5410 行，未触顶
+[OK   ] 跨月 20160315-20160410               ->   5445 行    6.2s
+        期望约 5800 行 -> 实际 5445 行，未触顶
+[OK   ] 跨月 20160920-20161016               ->   3405 行    3.7s
+        期望约 4700 行 -> 实际 3405 行，未触顶
+
+    五个 27 天窗口都没触顶。
+
+=== 3) 重复键：高密度月 + 基线日 ===
+[OK   ] 重复键检查 20151101-20151130            ->   7673 行    3.8s
+        重复 (ts_code,trade_date,suspend_type)：0 行
+        重复（再含 suspend_timing）：0 行
+[OK   ] 重复键检查 20160301-20160331            ->   6656 行    7.9s
+        重复 (ts_code,trade_date,suspend_type)：0 行
+        重复（再含 suspend_timing）：0 行
+[OK   ] 重复键检查 20160401-20160430            ->   6639 行    9.1s
+        重复 (ts_code,trade_date,suspend_type)：0 行
+        重复（再含 suspend_timing）：0 行
+[OK   ] 重复键检查 20261016                     ->     11 行    1.3s
+        20261016 重复 (ts_code,trade_date,suspend_type)：0 行
+
+=== 4) 0 行响应：列还在不在 ===
+Traceback (most recent call last):
+  File "C:\src\investor-strategy-screener\.worktrees\suspend-d-raw-layer\docs\tushare-api-evidence\probe_apis20.py", line 143, in <module>
+    frame = pro.suspend_d(trade_date=trade_date, fields=FIELDS)
+  File "C:\src\investor-strategy-screener\.venv\Lib\site-packages\tushare\pro\client.py", line 46, in query
+    raise Exception(result['msg'])
+Exception: [rate_limited] 请求额度已达到限制；建议等待30秒后重试；request_id=04cfcb391b05497896597b0a8bb69dd0

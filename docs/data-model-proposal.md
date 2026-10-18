@@ -121,6 +121,7 @@ Tushare ──同步（联网）──▶ 原始层（通用）──筛选（�
 
 1. 原来 `income` 主键取 `(ts_code, end_date, report_type)`，装不下同一报告期的多条修订记录，会互相覆盖（实测 10% 的报告期受影响）；
 2. 原来 `suspend_d` 主键取 `(ts_code, trade_date)`，装不下同一天既有停牌（`S`）又有复牌（`R`）两条。
+3. `suspend_d` 的三列主键是否够用，2026-10-18 已实测：2015-11、2016-03、2016-04 与 20261016 里 `(ts_code, trade_date, suspend_type)` 的重复数全为 0（再含 `suspend_timing` 也是 0），D3 的兜底规则不触发，主键保持三列（证据见 [`tushare-api-evidence/probe_out20.txt`](tushare-api-evidence/probe_out20.txt)）。
 
 - **备选**：只存最新一条并在更新时覆盖。实测反例表明"按 `update_flag` 选一行"会出错（可能取到空值行或较旧公告日的值）；若要采用，规则须改为"取 `ann_date` 最大且关键字段有值的一行"，且改口径时需重新拉取全部历史。
 - **状态**：**已同意**（2026-10-17；主键含 `ann_date` + `update_flag`，多版本全存，"取哪一行"留作计算层口径）
