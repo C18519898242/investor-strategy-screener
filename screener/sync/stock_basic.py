@@ -24,12 +24,9 @@ COLUMNS: tuple[str, ...] = (
 
 
 MERGE_KEY = "ts_code"
+# 代理对 `stock_basic` 的 `fields` 上限（2026-10-18 实测）：13 个字段（字符串长度 113）成功，
+# 14 个（长度 111）报 `invalid_params` —— 卡的是**个数**不是字符串长度，`fields='*'` 也报错。
 FIELD_LIMIT = 13
-"""代理对 `stock_basic` 的 `fields` 上限。
-
-2026-10-18 实测：13 个字段（长度 113）成功，14 个（长度 111）报 `invalid_params`，
-所以卡的是**个数**不是字符串长度；`fields='*'` 也报错。
-"""
 
 
 def fetch_stock_basic(connection: sqlite3.Connection, client: object) -> int:

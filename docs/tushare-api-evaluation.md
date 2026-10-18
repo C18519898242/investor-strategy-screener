@@ -112,6 +112,7 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 - **实测**：`list_status='L'` → 5577 行；`list_status='D'` → 339 行；`list_status='P'` → 0 行；`exchange='SSE'` → 2467 行。
 - **必须显式传 `fields`**：不传就报 `invalid_params`（见 6.1）。
 - **`fields` 最多 13 个**（**实测 2026-10-18**）：13 个（字符串长度 113）成功、14 个（长度 111）报 `invalid_params`——卡的是**个数**不是字符串长度，`fields='*'` 也报错。要取全部 15 列必须拆成两次调用再按 `ts_code` 合并。该上限是 `stock_basic` 特有的：同一次实测里 `daily_basic` 取 14 个字段正常返回 5567 行。
+- **`exchange=''` 在 `stock_basic` 上无害**（**实测 2026-10-18**）：`stock_basic(exchange='', list_status='L', fields=<≤13 个>)` → 5577 行，与不传 `exchange` 一致。第 6 节把 `exchange=''` 列为 `invalid_params` 触发条件，在 `stock_basic` 上不成立（对其它接口是否成立**未实测**）。
 - 官方限量"每次最多 6000 行"，实测 5577 行未触顶，但股票数增长后会触顶（**官方+实测**）。
 
 #### `stock_st`（[doc_id=397](https://tushare.pro/document/2?doc_id=397)）—— **已决定不接入**（2026-10-18）
