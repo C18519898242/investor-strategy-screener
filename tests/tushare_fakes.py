@@ -68,9 +68,7 @@ class FakeTushareClient:
 
     def daily_basic(self, **params):
         fields = self._record("daily_basic", params)
-        picked = [
-            row for row in self.daily_basic_rows if row["trade_date"] == params["trade_date"]
-        ]
+        picked = [row for row in self.daily_basic_rows if row["trade_date"] == params["trade_date"]]
         return self._slice(picked, fields)
 
     def _record(self, api_name, params):
