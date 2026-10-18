@@ -103,6 +103,34 @@ def open_database(path: Path) -> sqlite3.Connection:
         """
     )
     connection.execute("CREATE INDEX IF NOT EXISTS suspend_d_trade_date ON suspend_d (trade_date)")
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS daily_basic (
+            ts_code TEXT NOT NULL,
+            trade_date TEXT NOT NULL,
+            close REAL,
+            turnover_rate REAL,
+            turnover_rate_f REAL,
+            volume_ratio REAL,
+            pe REAL,
+            pe_ttm REAL,
+            pb REAL,
+            ps REAL,
+            ps_ttm REAL,
+            dv_ratio REAL,
+            dv_ttm REAL,
+            total_share REAL,
+            float_share REAL,
+            free_share REAL,
+            total_mv REAL,
+            circ_mv REAL,
+            PRIMARY KEY (ts_code, trade_date)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS daily_basic_trade_date ON daily_basic (trade_date)"
+    )
     return connection
 
 

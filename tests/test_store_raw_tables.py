@@ -7,6 +7,41 @@ from screener.store import delete_rows, insert_rows, open_database, replace_rows
 
 CALENDAR_COLUMNS = ("exchange", "cal_date", "is_open", "pretrade_date")
 SUSPEND_D_COLUMNS = ("ts_code", "trade_date", "suspend_timing", "suspend_type")
+DAILY_BASIC_COLUMNS = (
+    "ts_code",
+    "trade_date",
+    "close",
+    "turnover_rate",
+    "turnover_rate_f",
+    "volume_ratio",
+    "pe",
+    "pe_ttm",
+    "pb",
+    "ps",
+    "ps_ttm",
+    "dv_ratio",
+    "dv_ttm",
+    "total_share",
+    "float_share",
+    "free_share",
+    "total_mv",
+    "circ_mv",
+)
+
+
+def daily_basic_row(trade_date, **overrides):
+    row = dict.fromkeys(DAILY_BASIC_COLUMNS, 0.0)
+    row["ts_code"] = "000001.SZ"
+    row["trade_date"] = trade_date
+    row["close"] = 10.0
+    row["pe"] = 8.0
+    return {**row, **overrides}
+
+
+def daily_basic_values(trade_date, **overrides):
+    """insert_rows 收的是序列，所以按列顺序把上面那行转成元组。"""
+    row = daily_basic_row(trade_date, **overrides)
+    return tuple(row[name] for name in DAILY_BASIC_COLUMNS)
 
 
 class RawTablesTest(unittest.TestCase):
@@ -182,3 +217,50 @@ class RawTablesTest(unittest.TestCase):
             self.assertEqual(reopened.execute("SELECT COUNT(*) FROM suspend_d").fetchone(), (1,))
         finally:
             reopened.close()
+
+    def test_daily_basic_table_has_the_decided_columns_and_primary_key(self):
+        self.assertEqual(
+            [name for name, _ in self._columns("daily_basic")],
+            list(DAILY_BASIC_COLUMNS),
+        )
+        self.assertEqual([pk for _, pk in self._columns("daily_basic")], [1, 2] + [0] * 16)
+
+    def test_daily_basic_rejects_the_same_stock_on_the_same_day(self):
+        with self.assertRaises(sqlite3.IntegrityError):
+            insert_rows(
+                self.connection,
+                table="daily_basic",
+                columns=DAILY_BASIC_COLUMNS,
+                rows=[daily_basic_values("20261016"), daily_basic_values("20261016")],
+            )
+
+    def test_daily_basic_stores_a_full_row_and_deletes_only_the_named_day(self):
+        insert_rows(
+            self.connection,
+            table="daily_basic",
+            columns=DAILY_BASIC_COLUMNS,
+            rows=[
+                daily_basic_values("20261015"),
+                daily_basic_values("20261016", close=12.5, pe=None),
+            ],
+        )
+
+        removed = delete_rows(
+            self.connection, table="daily_basic", column="trade_date", value="20261016"
+        )
+
+        self.assertEqual(removed, 1)
+        self.assertEqual(
+            self.connection.execute("SELECT trade_date, close, pe FROM daily_basic").fetchall(),
+            [("20261015", 10.0, 8.0)],
+        )
+
+    def test_daily_basic_has_a_trade_date_index(self):
+        names = [
+            row[0]
+            for row in self.connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'daily_basic'"
+            )
+        ]
+
+        self.assertIn("daily_basic_trade_date", names)
