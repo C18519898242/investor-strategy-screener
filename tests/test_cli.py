@@ -7,6 +7,7 @@ import pandas as pd
 
 from screener.cli import main
 from screener.config import Settings
+from screener.logging import shutdown_logging
 from screener.store import begin_sync, open_database, published_datasets
 from screener.strategies.base import Strategy, StrategySpec
 from screener.strategies.episode_01_graham import GrahamStrategy
@@ -48,10 +49,12 @@ class MenuTest(unittest.TestCase):
         shutil.rmtree(self.root, ignore_errors=True)
         self.root.mkdir(parents=True)
         self.connection = open_database(self.root / "screener.sqlite3")
+        self.log_file = self.root / "logs" / "screener.log"
         self.output = []
         self.fetch_calls = 0
 
     def tearDown(self):
+        shutdown_logging()
         self.connection.close()
         shutil.rmtree(self.root, ignore_errors=True)
 
@@ -73,6 +76,7 @@ class MenuTest(unittest.TestCase):
             clock=lambda: "2026-10-11 09:00:00",
             strategies=(ReadyStrategy(),),
             output_root=self.root,
+            log_file=self.log_file,
         )
 
     def _fetch(self, connection, datasets, client):
@@ -147,8 +151,22 @@ class MenuTest(unittest.TestCase):
                 clock=lambda: "2026-10-11 09:00:00",
                 strategies=(GrahamStrategy(),),
                 output_root=self.root,
+                log_file=self.log_file,
             )
 
         self.assertEqual(code, 0)
         self.assertEqual(published_datasets(self.connection), frozenset({"股票列表", "交易日历"}))
         self.assertNotIn("SECRET-TOKEN-VALUE", "\n".join(self.output))
+
+    def test_log_file_never_contains_the_token(self):
+        self._run(["1", "1", ""])
+
+        text = self.log_file.read_text(encoding="utf-8")
+
+        self.assertIn("更新完成：2026-10-11 09:00:00", text)
+        self.assertNotIn("SECRET-TOKEN-VALUE", text)
+
+    def test_sync_logs_the_dataset_names(self):
+        self._run(["1", "1", ""])
+
+        self.assertIn("更新范围：prices、financials", "\n".join(self.output))

@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -5,10 +6,13 @@ from pathlib import Path
 import pandas as pd
 
 from screener.config import Settings
+from screener.logging import setup_logging
 from screener.report import render_html, write_result
 from screener.store import last_successful_sync_at, published_datasets
 from screener.strategies import Strategy, load_builtin_strategies
 from screener.sync import fetch_datasets, sync_all
+
+logger = logging.getLogger(__name__)
 
 
 class DataNotReadyError(Exception):
@@ -38,8 +42,11 @@ def main(
     clock: Callable[[], str] = lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     strategies: tuple[Strategy, ...] | None = None,
     output_root: Path = Path("."),
+    log_file: Path = Path("logs") / "screener.log",
 ) -> int:
     strategies = load_builtin_strategies() if strategies is None else strategies
+    setup_logging(log_file=log_file, console=output_fn)
+    logger.info("启动：投资人选股策略")
     while True:
         updated = last_successful_sync_at(connection) or "无"
         output_fn("投资人选股策略")
@@ -74,10 +81,9 @@ def _sync_menu(connection, strategies, settings, fetch, clock, input_fn, output_
             dataset for strategy in strategies for dataset in strategy.spec.required_datasets
         )
     )
-    output_fn("更新范围：所有已实现策略所需的数据")
-    output_fn("正在更新共用数据，并补充策略专用数据（如有）……")
+    logger.info("更新范围：%s", "、".join(datasets))
     try:
-        finished_at = sync_all(
+        sync_all(
             connection,
             datasets=datasets,
             settings=settings,
@@ -85,9 +91,8 @@ def _sync_menu(connection, strategies, settings, fetch, clock, input_fn, output_
             finished_at=clock(),
         )
     except Exception as error:
-        output_fn(f"更新失败：{error}")
+        logger.error("更新失败：%s", error, exc_info=True)
         return 1
-    output_fn(f"更新完成：{finished_at}")
     input_fn("按回车返回主菜单")
     return 0
 
@@ -119,11 +124,12 @@ def _screen_menu(connection, strategies, output_root, input_fn, output_fn) -> in
             output_fn("本地数据不完整，无法筛选")
         return 0
     output_fn(f"使用行情交易日：{trade_date}")
+    logger.info("开始筛选：%s（%s）", strategy.spec.menu_name, trade_date)
     output_fn("正在读取本地数据并筛选……")
     try:
         frame = strategy.screen(pd.DataFrame())
     except NotImplementedError as error:
-        output_fn(str(error))
+        logger.error("%s", error)
         return 0
     rows = frame.to_dict("records")
     html = render_html(
@@ -139,7 +145,6 @@ def _screen_menu(connection, strategies, output_root, input_fn, output_fn) -> in
         generated_at=datetime.now(),
         html=html,
     )
-    output_fn(f"入选股票：{len(rows)} 只")
-    output_fn(f"结果文件：{path.as_posix()}")
+    logger.info("筛选完成：入选 %d 只，结果 %s", len(rows), path.as_posix())
     input_fn("按回车返回主菜单")
     return 0
