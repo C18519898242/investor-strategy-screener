@@ -124,8 +124,9 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 #### `suspend_d`（[doc_id=214](https://tushare.pro/document/2?doc_id=214)）
 
 - 参数：`ts_code`、`trade_date`、`start_date`、`end_date`、`suspend_type`（`S` 停牌 / `R` 复牌）。
-- 字段（**实测**）：`ts_code, trade_date, suspend_timing, suspend_type`。
-- **实测**：`suspend_d(trade_date='20261016', suspend_type='S')` → 10 行；`suspend_timing` 为 `null`（非日内停牌）。
+- 字段（**实测**）：`ts_code, trade_date, suspend_timing, suspend_type`。`trade_date` 是停复牌日期，**覆盖从停牌到复牌期间的连续日期**，不只是停牌当天（**官方**）。
+- **实测（2026-10-18）**：`suspend_d(trade_date='20261016')` → 11 行（`S` 10 行 + `R` 1 行），**一次调用同时返回停牌与复牌记录**，不必按 `suspend_type` 分两次取。`suspend_timing` 的官方口径是「**日内停牌才有值，否则为空**」，不是"恒为 null"。
+- **分段实测（2026-10-18）**：区间超过约 1 个月会被**静默截断到恰好 5000 行**（不报错，只是少数据）；单个自然月从不截断（2015-11 为 7673 行，2018-01 为 5017 行）；11 年区间直接报 `date_range_too_large`。官方**没有 `limit`/`offset` 分页参数**，按日期分段是唯一出路 —— 本项目取固定 **27 天**一段（2015Q4–2017Q4 九个季度共 143829 行 ≈ 1.6 万行/季度；2016 年约 6.5 万行，2024 年仅 3740 行）。
 - 官方：数据从 2000-01-03 起，单次 5000 行（**官方**）。
 
 #### `daily_basic`（[doc_id=32](https://tushare.pro/document/2?doc_id=32)）
