@@ -88,10 +88,11 @@ Tushare ──同步（联网）──▶ 原始层（通用，store）──筛
 | `fina_indicator` | `(ts_code, end_date, ann_date, update_flag)` | `end_date` |
 | `dividend` | `(ts_code, end_date, ann_date, div_proc)` | `ann_date` |
 | `stock_basic` | `ts_code` | `list_status` |
-| `stock_st` | `(ts_code, trade_date)` | `trade_date` |
 | `suspend_d` | `(ts_code, trade_date, suspend_type)` | `trade_date` |
 | `namechange` | `(ts_code, name, start_date)` | — |
 | `index_member_all` | `(ts_code, l1_code, l2_code, l3_code, in_date)` | `ts_code` |
+
+- **不接入 `stock_st`**（2026-10-18）：所有策略都排除 ST/\*ST，不需要单独维护 ST 名单；ST 直接从 `stock_basic.name` 前缀识别（实测同日与 `stock_st` 的 201 只完全一致）。`stock_basic` 是当前快照，历史筛选日的 ST 状态需靠 `namechange` 还原。
 
 - 同一报告期的**多个修订版本全部保留**，"取哪一行"是计算层的口径，不在写入时决定。实测财务表**没有"更新时间"字段**，`update_flag` 的语义未定论，因此不能靠某一列挑"最新"。
 - 写入必须**幂等**：主键冲突不报错、不重复，不允许默默覆盖。
@@ -107,7 +108,7 @@ Tushare ──同步（联网）──▶ 原始层（通用，store）──筛
 | 日频：`daily_basic`、`daily`、`adj_factor` | `MAX(trade_date)` | 用交易日历定出缺失交易日，逐日补（1 次/天） |
 | 分红：`dividend` | `MAX(ann_date)` | 按 `ann_date` 逐日取全市场 |
 | 财务四表 | 逐股已取到的报告期 | `disclosure_date(actual_date=当日)` 取当天披露名单，再逐股拉 |
-| 状态类：`stock_basic`、`stock_st`、`namechange` | 快照 | 每次全量重拉 |
+| 状态类：`stock_basic`、`namechange` | 快照 | 每次全量重拉 |
 
 - **首次全量回填**：11 年 × 4 张财务表 × 5577 只 ≈ 24.5 万次调用 ≈ 20 小时（财报单次区间上限 1 年，必须按年分段），`adj_factor` 约 2700 次 ≈ 13 分钟。日常增量平时 1～2 分钟，披露季峰值约 25 分钟。
 

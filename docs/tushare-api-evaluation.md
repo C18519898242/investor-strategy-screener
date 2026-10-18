@@ -22,7 +22,7 @@
 
 ## 1. 结论摘要
 
-1. 第 1 集需要 **9 个必需接口**：`trade_cal`、`stock_basic`、`stock_st`、`suspend_d`、`daily_basic`、`income`、`balancesheet`、`fina_indicator`、`dividend`。另有 2 个按需接口（`namechange`、`index_member_all`），以及 1 个**同步增量专用**接口 `disclosure_date`（第 4.5 节，把日常财报更新从 1.4 小时压到分钟级）。
+1. 第 1 集需要 **8 个必需接口**：`trade_cal`、`stock_basic`、`suspend_d`、`daily_basic`、`income`、`balancesheet`、`fina_indicator`、`dividend`。**`stock_st` 已决定不接入**（2026-10-18）——所有策略都排除 ST/\*ST，ST 直接从 `stock_basic.name` 前缀识别即可，理由与实测依据见第 4.1 节。另有 2 个按需接口（`namechange`、`index_member_all`），以及 1 个**同步增量专用**接口 `disclosure_date`（第 4.5 节，把日常财报更新从 1.4 小时压到分钟级）。
 2. **`daily` 不需要**。第 1 集只要收盘价和总市值，`daily_basic.close` 与 `daily_basic.total_mv` 已覆盖，且 `daily` 明显更慢。
 3. **财务三表没有全市场批量接口**：`income_vip`/`balancesheet_vip`/`fina_indicator_vip` 在本账号返回 `unknown_api`。财报只能**按单只股票**循环取，这是整个同步设计里最贵的部分（第 7 节给出修正后的成本）。
 4. **`income` 的单季报表（`report_type='2'`）可用**，实测四个单季之和与年报累计**完全相等**（差 0 元）。因此 [`strategies.md`](../strategies.md) 中「最近 12 个月归母净利润：公式已定，字段待核验」这一行，可以按"字段已核验"处理。
@@ -30,6 +30,23 @@
 6. **代理层有 7 条硬约束**（第 6 节）：必须显式传 `fields`、财报查询必须带 `ts_code`、单次区间上限 1 年、限频、偶发不可用、慢查询超时、部分参数被静默忽略。实现时必须按这些约束写重试与分段逻辑。
 7. **同一报告期会返回多个版本**（实测）：`income`/`balancesheet`/`fina_indicator` 都存在同报告期多行，且**两类冲突都有**（同公告日仅 `update_flag` 不同、公告日不同而 `update_flag` 相同）。`update_flag` 的语义**未定论**，不能按"0=最新"取用（第 4.3 节给出两个反例）。三表**都没有"更新时间"字段**。
 8. **两张"已规划"表已实测通过**（第 4.6 节）：`cashflow` 与 `income` 完全同构（逐股取、1 年上限、同报告期多版本）；`adj_factor` 可按交易日取全市场（**5577 行/日**），逐股可一次取长区间，历史自 **2015-03** 起 → 11 年起点够用。
+
+**各接口作用速查（只说接口本身是什么）：**
+
+| 接口 | 作用 |
+| --- | --- |
+| `trade_cal` | 交易日历：每天是否开市、上一交易日是哪天 |
+| `stock_basic` | 股票列表：名称、地区、行业、板块、交易所、上市状态、上市/退市日期等静态信息 |
+| `suspend_d` | 每日停牌、复牌记录 |
+| `daily_basic` | 每日行情与估值指标：收盘价、总市值、流通市值、PE/PB/PS、股息率、换手率、股本等 |
+| `income` | 利润表：营业收入、净利润、归母净利润、EPS 等，含单季与累计两种口径 |
+| `balancesheet` | 资产负债表：资产、负债、股东权益各科目 |
+| `fina_indicator` | 财务指标：ROE、毛利率、资产负债率、流动比率等现成比率 |
+| `dividend` | 分红送配方案：每股分红、送转比例、登记日/除权日、方案进度 |
+
+另有三张非必需接口：`namechange`（股票曾用名变更记录）、`index_member_all`（申万行业成分股）、`disclosure_date`（财报预计与实际披露日期），细节见第 4.5、4.6 节。
+
+**不接入 `stock_st`（2026-10-18）**：所有策略都排除 ST/\*ST，不需要单独维护 ST 名单；ST 直接从 `stock_basic.name` 前缀识别（实测同日与 `stock_st` 的 201 只完全一致）。注意 `stock_basic` 是当前快照，历史筛选日的 ST 状态需靠 `namechange` 还原。
 
 ## 2. 环境与复现方法
 
@@ -53,13 +70,13 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 | --- | --- | --- |
 | 通用规则 1：日期 | 运行日的上一交易日；所选日或之前最近交易日 | `trade_cal`（`is_open`、`pretrade_date`）。**实测** `pretrade_date` 有值可用（20261016→20261015）；窗口第一行为空串，不要依赖首行 |
 | 通用规则 2：期间末取价 | 期间内最后一个"未停牌且有收盘行情"的交易日 | `daily_basic`（有记录即有行情）+ `suspend_d`（停牌判定）。**实测**停牌股在 `daily` 和 `daily_basic` 中都没有记录，所以"期间内最后一个交易日"天然不会取到停牌日 |
-| 通用规则 3：股票池 | 板块、行业、ST、退市整理期、停牌 | `stock_basic`（`market`/`exchange`/`industry`/`list_status`/`delist_date`）+ `stock_st`（按日 ST 名单）+ `suspend_d` + `namechange`（退市整理期，备用） |
+| 通用规则 3：股票池 | 板块、行业、ST、退市整理期、停牌 | `stock_basic`（`market`/`exchange`/`industry`/`list_status`/`delist_date`，ST 看 `name` 前缀）+ `suspend_d` + `namechange`（退市整理期，备用） |
 
 通用规则 3 的实测实现要点：
 
 - **板块**：`stock_basic.market` 取值实测为 `主板`/`创业板`/`科创板`/`北交所`（官方输出说明里没列"北交所"，但实测确实返回，**实测**）。上市股票 5577 只中：主板 3197、创业板 1411、科创板 618、北交所 351。排除北交所即 `market != '北交所'`（或 `exchange != 'BSE'`）。
 - **B 股**：`list_status='L'` 的 5577 只里**没有** 900xxx（沪 B）或 200xxx（深 B）（**实测**）。但 `list_status='D'`（退市 339 只）等其它状态是否含 B 股**未核验**。
-- **ST/*ST**：`stock_st(trade_date=...)` 实测返回 201 行（20261016），字段 `ts_code, name, trade_date, type, type_name`；`type` 实测**全部**是 `ST`、`type_name` 是 `风险警示板`，**不能用 `type` 区分 ST 与 \*ST，要看 `name` 前缀**。交叉验证：同日 `stock_basic.name` 含 "ST" 的也是 201 只，两者一致（**实测**）。
+- **ST/*ST**：**不接入 `stock_st`**（见 4.1 节），ST 直接从 `stock_basic.name` 前缀识别 —— 实测 `stock_st` 返回的 201 只（20261016）与同日 `stock_basic.name` 含 "ST" 的 201 只**完全一致**；且 `stock_st.type` 全为 `ST`、`type_name` 为 `风险警示板`，本来就**不能**区分 ST 与 \*ST，`name` 前缀才是唯一可用判据（**实测**）。注意 `stock_basic` 是当前快照，历史筛选日需靠 `namechange` 还原。
 - **退市整理期**：`namechange` 实测能取到 `change_reason='退市整理期'`（000004.SZ，`name='国华退'`，`start_date=20260623`）（**实测**）；退市股 `stock_basic.name` 也带 "退"（如 `PT金田A(退)`、`国华退`）。
 - **停牌**：`suspend_d(suspend_type='S', trade_date=...)` 实测当日 10 只。`daily` 官方明确"停牌期间不提供数据"（**官方**），与实测一致。
 - **行业排除银行、保险**：见 4.2 节，`stock_basic.industry` 一次调用即可，**不需要**申万行业接口。
@@ -96,13 +113,11 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 - **必须显式传 `fields`**：不传就报 `invalid_params`（见 6.1）。
 - 官方限量"每次最多 6000 行"，实测 5577 行未触顶，但股票数增长后会触顶（**官方+实测**）。
 
-#### `stock_st`（[doc_id=397](https://tushare.pro/document/2?doc_id=397)）
+#### `stock_st`（[doc_id=397](https://tushare.pro/document/2?doc_id=397)）—— **已决定不接入**（2026-10-18）
 
-- 参数：`trade_date`。
-- 字段（**实测**）：`ts_code, name, trade_date, type, type_name`。
-- **实测**：`stock_st(trade_date='20261016')` → 201 行；`type` 全为 `ST`，`type_name` 为 `风险警示板`；样例 `*ST美丽`、`*ST康佳A`。
-- 用途：判断**筛选日**是否 ST/*ST。区分 ST 与 \*ST 只能看 `name` 前缀（**实测**）。
-- 官方：3000 积分起，单次最大 1000 行，数据从 20000101 开始（**官方**）。
+- **原因**：本项目所有策略都排除 ST/\*ST，不需要单独维护 ST 名单；ST 直接从 `stock_basic.name` 前缀识别。
+- **实测依据（保留）**：`stock_st(trade_date='20261016')` → 201 行；字段 `ts_code, name, trade_date, type, type_name`；`type` 全为 `ST`、`type_name` 为 `风险警示板`，**不能用 `type` 区分 ST 与 \*ST**。交叉验证：同日 `stock_basic.name` 含 "ST" 的也是 201 只，**两者一致** → 因此 `stock_basic` 已足够，不必多接一个接口、多建一张表。
+- **注意**：`stock_basic` 是当前快照，历史筛选日的 ST 状态需靠 `namechange` 还原。
 
 #### `suspend_d`（[doc_id=214](https://tushare.pro/document/2?doc_id=214)）
 
@@ -256,7 +271,7 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 | 停牌股在 `daily` 与 `daily_basic` 中均无记录 | 20261016 十只停牌股，两个接口各 0 只命中 |
 | 排除保险必须用申万 L2「保险Ⅱ」 | 中国平安/中国太保/新华保险 L2=保险Ⅱ；中信证券 L2=证券Ⅱ |
 | `stock_basic.industry` 可直接识别银行、保险 | 银行 42 只、保险 5 只、证券 50 只、多元金融 23 只 |
-| `stock_st` 与 `stock_basic.name` 含 ST 的数量一致 | 同日均 201 只 |
+| **`stock_basic.name` 可直接识别 ST**（与 `stock_st` 交叉验证一致，故不接入 `stock_st`） | 同日均 201 只 |
 | 分红 `cash_div_tax × base_share` 单位为万元 | 0.4 × 46914.4503 = 18765.78 万元 |
 | **同一报告期会返回多个版本**（三表都是） | 12 只样本 100 个报告期中：`fina_indicator` 11 组、`income` 10 组、`balancesheet` 7 组出现多行 |
 | **多版本有两类冲突，主键须同时含 `ann_date` 与 `update_flag`** | 同公告日仅 flag 不同（`fina_indicator` 11 组、`income` 10 组）；公告日不同而 flag 相同（`balancesheet` 两行 flag 均为 `0`，另一例均为 `1`） |
@@ -298,8 +313,7 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 
 | 接口 | 次数 | 说明 |
 | --- | --- | --- |
-| `stock_basic` | 2 | `L` 与 `D` 各一次 |
-| `stock_st` | 1 | 筛选日 |
+| `stock_basic` | 2 | `L` 与 `D` 各一次（ST 判定所需的 `name` 也在其中） |
 | `suspend_d` | ~13 | 筛选日 + 12 个季度末 |
 | `daily_basic` | ~16 | 筛选日 + 12 个季末 + 3 个年度末 |
 | `trade_cal` | 1~2 | 推导上一交易日与季末取价日 |
@@ -348,7 +362,7 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 - [`strategies.md`](../strategies.md) 第 280 行「最近 12 个月归母净利润 …… **公式已定，字段待核验**」：单季字段已实测可用，可升级为"字段已核验"。
 - [`strategies.md`](../strategies.md) 第 272 行附近表格中「当前及历史 `PE_TTM`」「当前 `PB`」的"需要计算"结论**保持不变**，本文未推翻任何既有口径。
 - [`strategies.md`](../strategies.md) 第 286 行「流动比率、营运资本/长期负债」：所需三个 `balancesheet` 科目已实测齐全。
-- [`strategies.md`](../strategies.md) 第 21 行通用规则 3「股票状态和行业分类字段仍须在数据源接入时核验」：本文第 3.1、4.2 节即为核验结果（`market` 可识别北交所、`industry` 可排除银行/保险、`stock_st` 可判 ST、`namechange` 可识别退市整理期）。
+- [`strategies.md`](../strategies.md) 第 21 行通用规则 3「股票状态和行业分类字段仍须在数据源接入时核验」：本文第 3.1、4.2 节即为核验结果（`market` 可识别北交所、`industry` 可排除银行/保险、`stock_basic.name` 可判 ST、`namechange` 可识别退市整理期）。
 - [`sources/data-source-evaluation.md`](../sources/data-source-evaluation.md) 第 41 行「实际账号能否调用、历史年份是否齐全、停牌日与退市股票的覆盖、分页及频率限制，均待接入测试」：本文已给出实测答案（全部可调用；历史总市值回溯到 2015 年；停牌股无记录；分页与限频行为见第 6 节）。
 - [`docs/data-model-proposal.md`](data-model-proposal.md)：该提案的 D3（多版本与主键）、D7（全量下载的代价与时间起点）、D8（同步进度与差集、财报增量路径）均已按本文第 4.3、4.5、7 节的实测结论更新。本文是该提案的**证据来源**，两者结论必须保持一致。
 - [`docs/superpowers/specs/2026-10-11-tech-selection-architecture-design.md`](superpowers/specs/2026-10-11-tech-selection-architecture-design.md) 第 68 行「Tushare Token 只从本机环境变量读取」：当前实现是 [`.env`](../.env.example) 文件加环境变量、由 [`screener/config.py`](../screener/config.py) 统一读取，措辞可更新。该文档中**没有**"代理地址固定为某 URL"的表述（本次核对确认），与本评估无关。
