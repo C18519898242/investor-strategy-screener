@@ -56,6 +56,14 @@ class LoggingTest(unittest.TestCase):
         self.assertIn("Traceback", text)
         self.assertIn("ValueError: boom", text)
 
+    def test_stack_info_goes_to_the_file_only(self):
+        self._setup()
+
+        logging.getLogger("screener.cli").info("带堆栈", stack_info=True)
+
+        self.assertEqual(self.console, ["带堆栈"])
+        self.assertIn("Stack (most recent call last)", self.log_file.read_text(encoding="utf-8"))
+
     def test_setting_up_twice_does_not_accumulate_handlers(self):
         self._setup()
         self._setup()

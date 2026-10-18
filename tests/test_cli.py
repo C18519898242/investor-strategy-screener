@@ -164,6 +164,7 @@ class MenuTest(unittest.TestCase):
         text = self.log_file.read_text(encoding="utf-8")
 
         self.assertIn("更新完成：2026-10-11 09:00:00", text)
+        self.assertIn(f"客户端就绪：timeout=120 秒，地址 {PROXY_URL}", text)
         self.assertNotIn("SECRET-TOKEN-VALUE", text)
 
     def test_sync_logs_the_dataset_names(self):

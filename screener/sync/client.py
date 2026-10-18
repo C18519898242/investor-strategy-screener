@@ -5,6 +5,8 @@ from screener.sync.errors import SyncError
 
 logger = logging.getLogger(__name__)
 
+TIMEOUT_SECONDS = 120
+
 
 def read_tushare_config(settings: Settings) -> tuple[str, str]:
     """读取必填的 Tushare 配置；缺失项一次性全部报出。"""
@@ -24,7 +26,7 @@ def create_tushare_client(settings: Settings) -> object:
     import tushare as ts
 
     token, api_url = read_tushare_config(settings)
-    client = ts.pro_api(token, timeout=120)
+    client = ts.pro_api(token, timeout=TIMEOUT_SECONDS)
     client._DataApi__http_url = api_url
-    logger.debug("客户端就绪：timeout=120 秒，地址 %s", api_url)
+    logger.debug("客户端就绪：timeout=%d 秒，地址 %s", TIMEOUT_SECONDS, api_url)
     return client

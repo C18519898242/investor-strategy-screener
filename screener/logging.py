@@ -22,6 +22,7 @@ class ConsoleHandler(logging.Handler):
         record = logging.makeLogRecord(record.__dict__)
         record.exc_info = None
         record.exc_text = None
+        record.stack_info = None
         self._console(self.format(record))
 
 
