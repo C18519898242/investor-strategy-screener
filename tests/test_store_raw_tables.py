@@ -1,10 +1,12 @@
 import shutil
+import sqlite3
 import unittest
 from pathlib import Path
 
-from screener.store import open_database, replace_rows
+from screener.store import begin_sync, delete_rows, insert_rows, open_database, replace_rows
 
 CALENDAR_COLUMNS = ("exchange", "cal_date", "is_open", "pretrade_date")
+SUSPEND_D_COLUMNS = ("ts_code", "trade_date", "suspend_timing", "suspend_type")
 
 
 class RawTablesTest(unittest.TestCase):
@@ -97,3 +99,81 @@ class RawTablesTest(unittest.TestCase):
         self.assertEqual(
             self.connection.execute("SELECT delist_date FROM stock_basic").fetchone(), (None,)
         )
+
+    def test_suspend_d_table_has_the_decided_columns_and_primary_key(self):
+        self.assertEqual(
+            [name for name, _ in self._columns("suspend_d")],
+            ["ts_code", "trade_date", "suspend_timing", "suspend_type"],
+        )
+        self.assertEqual([pk for _, pk in self._columns("suspend_d")], [1, 2, 0, 3])
+
+    def test_suspend_d_stores_both_types_on_the_same_day(self):
+        insert_rows(
+            self.connection,
+            table="suspend_d",
+            columns=SUSPEND_D_COLUMNS,
+            rows=[
+                ("000001.SZ", "20261016", "09:30-10:00", "S"),
+                ("000001.SZ", "20261016", None, "R"),
+            ],
+        )
+
+        self.assertEqual(
+            self.connection.execute(
+                "SELECT suspend_timing, suspend_type FROM suspend_d ORDER BY suspend_type DESC"
+            ).fetchall(),
+            [("09:30-10:00", "S"), (None, "R")],
+        )
+
+    def test_delete_rows_removes_only_the_named_day(self):
+        insert_rows(
+            self.connection,
+            table="suspend_d",
+            columns=SUSPEND_D_COLUMNS,
+            rows=[
+                ("000001.SZ", "20261015", None, "S"),
+                ("000001.SZ", "20261016", None, "S"),
+                ("000002.SZ", "20261016", None, "S"),
+            ],
+        )
+
+        removed = delete_rows(
+            self.connection, table="suspend_d", column="trade_date", value="20261016"
+        )
+
+        self.assertEqual(removed, 2)
+        self.assertEqual(
+            self.connection.execute("SELECT ts_code, trade_date FROM suspend_d").fetchall(),
+            [("000001.SZ", "20261015")],
+        )
+
+    def test_insert_rows_is_repeatable_on_an_empty_day(self):
+        rows = [("000001.SZ", "20261016", None, "S")]
+        insert_rows(self.connection, table="suspend_d", columns=SUSPEND_D_COLUMNS, rows=rows)
+        first = self.connection.execute("SELECT * FROM suspend_d").fetchall()
+        delete_rows(self.connection, table="suspend_d", column="trade_date", value="20261016")
+        insert_rows(self.connection, table="suspend_d", columns=SUSPEND_D_COLUMNS, rows=rows)
+
+        self.assertEqual(self.connection.execute("SELECT * FROM suspend_d").fetchall(), first)
+
+    def test_abort_commits_the_partial_write_but_a_plain_write_does_not(self):
+        self.assertFalse(self.connection.in_transaction)
+
+        batch = begin_sync(self.connection)
+        self.assertFalse(self.connection.in_transaction)
+        insert_rows(
+            self.connection,
+            table="suspend_d",
+            columns=SUSPEND_D_COLUMNS,
+            rows=[("000001.SZ", "20261016", None, "S")],
+        )
+        self.assertTrue(self.connection.in_transaction)
+
+        batch.abort()
+        self.assertFalse(self.connection.in_transaction)
+
+        reopened = sqlite3.connect(self.directory / "screener.sqlite3")
+        try:
+            self.assertEqual(reopened.execute("SELECT COUNT(*) FROM suspend_d").fetchone(), (1,))
+        finally:
+            reopened.close()

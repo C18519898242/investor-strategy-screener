@@ -88,8 +88,44 @@ def open_database(path: Path) -> sqlite3.Connection:
         )
         """
     )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS suspend_d (
+            ts_code TEXT NOT NULL,
+            trade_date TEXT NOT NULL,
+            suspend_timing TEXT,
+            suspend_type TEXT NOT NULL,
+            PRIMARY KEY (ts_code, trade_date, suspend_type)
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS suspend_d_trade_date ON suspend_d (trade_date)")
     connection.commit()
     return connection
+
+
+def insert_rows(
+    connection: sqlite3.Connection,
+    *,
+    table: str,
+    columns: tuple[str, ...],
+    rows: Iterable[Sequence[object]],
+) -> int:
+    """只插入，不删任何东西；不提交，提交点仍由同步批次决定。"""
+    materialized = list(rows)
+    placeholders = ", ".join("?" * len(columns))
+    connection.executemany(
+        f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders})",
+        materialized,
+    )
+    return len(materialized)
+
+
+def delete_rows(connection: sqlite3.Connection, *, table: str, column: str, value: object) -> int:
+    """删掉 column = value 的行；不提交，提交点仍由同步批次决定。"""
+    cursor = connection.execute(f"DELETE FROM {table} WHERE {column} = ?", (value,))
+    logger.debug("%s 删除 %s = %s 的行，共 %d 行", table, column, value, cursor.rowcount)
+    return cursor.rowcount
 
 
 def replace_rows(
@@ -102,13 +138,9 @@ def replace_rows(
     """清空整张表再批量插入；不提交，提交点仍由同步批次决定。"""
     materialized = list(rows)
     connection.execute(f"DELETE FROM {table}")
-    placeholders = ", ".join("?" * len(columns))
-    connection.executemany(
-        f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders})",
-        materialized,
-    )
-    logger.debug("%s 清空旧数据，写入 %d 行", table, len(materialized))
-    return len(materialized)
+    count = insert_rows(connection, table=table, columns=columns, rows=materialized)
+    logger.debug("%s 清空旧数据，写入 %d 行", table, count)
+    return count
 
 
 def _latest_published_id(connection: sqlite3.Connection) -> int | None:
