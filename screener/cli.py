@@ -88,7 +88,7 @@ def _sync_menu(connection, strategies, settings, fetch, clock, input_fn, output_
             datasets=datasets,
             settings=settings,
             fetch=fetch,
-            finished_at=clock(),
+            clock=clock,
         )
     except Exception as error:
         logger.error("更新失败：%s", error, exc_info=True)

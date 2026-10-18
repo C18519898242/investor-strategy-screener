@@ -38,7 +38,7 @@ class SyncOrchestrationTest(unittest.TestCase):
             datasets=("prices",),
             settings=settings(),
             fetch=lambda connection, datasets, client: {"prices": 1},
-            finished_at="2026-10-11 09:00:00",
+            clock=lambda: "2026-10-11 09:00:00",
         )
 
         def fail(connection, datasets, client):
@@ -50,7 +50,7 @@ class SyncOrchestrationTest(unittest.TestCase):
                 datasets=("financials",),
                 settings=settings(),
                 fetch=fail,
-                finished_at="2026-10-11 10:00:00",
+                clock=lambda: "2026-10-11 10:00:00",
             )
 
         self.assertEqual(published_datasets(connection), frozenset({"prices"}))
@@ -65,7 +65,7 @@ class SyncOrchestrationTest(unittest.TestCase):
                 datasets=("prices",),
                 settings=settings(tushare_token=""),
                 fetch=lambda connection, datasets, client: {},
-                finished_at="2026-10-11 09:00:00",
+                clock=lambda: "2026-10-11 09:00:00",
             )
 
         self.assertIsNone(last_successful_sync_at(connection))
@@ -83,7 +83,7 @@ class SyncOrchestrationTest(unittest.TestCase):
             datasets=("prices",),
             settings=settings(),
             fetch=fetch,
-            finished_at="2026-10-11 09:00:00",
+            clock=lambda: "2026-10-11 09:00:00",
         )
 
         self.assertIs(seen["connection"], connection)
@@ -99,7 +99,29 @@ class SyncOrchestrationTest(unittest.TestCase):
                 datasets=("prices",),
                 settings=settings(tushare_api_url=""),
                 fetch=lambda connection, datasets, client: {},
-                finished_at="2026-10-11 09:00:00",
+                clock=lambda: "2026-10-11 09:00:00",
             )
 
         self.assertIsNone(last_successful_sync_at(connection))
+
+    def test_finished_at_is_taken_after_the_fetch(self):
+        connection = open_database(self.path)
+        fetched = []
+
+        def clock():
+            return "2026-10-11 10:00:00" if fetched else "2026-10-11 09:00:00"
+
+        def fetch(connection, datasets, client):
+            fetched.append(1)
+            return {"prices": 1}
+
+        finished_at = sync_all(
+            connection,
+            datasets=("prices",),
+            settings=settings(),
+            fetch=fetch,
+            clock=clock,
+        )
+
+        self.assertEqual(finished_at, "2026-10-11 10:00:00")
+        self.assertEqual(last_successful_sync_at(connection), "2026-10-11 10:00:00")

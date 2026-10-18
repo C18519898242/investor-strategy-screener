@@ -138,5 +138,5 @@ console_handler.setLevel(logging.INFO)   # 对应 CONSOLE 的 threshold
 - 不做日志轮转；不做门槛配置化（门槛写死在 `setup_logging` 里，要改就改代码）
 - 不引入 `loguru` / `structlog` 等第三方日志库
 - 不做结构化日志（JSON），不接外部日志服务
-- 不改 `sync_all` / `fetch_datasets` 的签名
+- 不改 `sync_all` / `fetch_datasets` 的签名。**改动记录（2026-10-18，同日后续）**：`sync_all` 的 `finished_at: str` 已改成 `clock: Callable[[], str]` —— 原来的写法在调用 `sync_all` 之前就把时间算好了，记下的是**开始**时间而不是结束时间，与架构文档「数据流」和 product.md 的「整次更新任务的结束时间」不符；现在由 `sync_all` 在 `batch.publish` 紧前取时间。`fetch_datasets` 的签名始终未动。
 - 不把菜单文本、提示语塞进日志文件

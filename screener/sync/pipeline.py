@@ -15,7 +15,7 @@ def sync_all(
     datasets: tuple[str, ...],
     settings: Settings,
     fetch: Callable[[sqlite3.Connection, tuple[str, ...], object], Mapping[str, int]],
-    finished_at: str,
+    clock: Callable[[], str],
 ) -> str:
     client = create_tushare_client(settings)
     logger.debug("开始同步，数据集：%s", "、".join(datasets))
@@ -27,6 +27,7 @@ def sync_all(
             raise RuntimeError("同步结果缺少所需数据")
         for dataset in datasets:
             batch.record(dataset, counts[dataset])
+        finished_at = clock()
         batch.publish(finished_at)
     except Exception:
         batch.abort()
