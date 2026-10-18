@@ -8,7 +8,7 @@ from screener.config import Settings
 from screener.report import render_html, write_result
 from screener.store import last_successful_sync_at, published_datasets
 from screener.strategies import Strategy, load_builtin_strategies
-from screener.sync import fetch_not_implemented, sync_all
+from screener.sync import fetch_datasets, sync_all
 
 
 class DataNotReadyError(Exception):
@@ -34,7 +34,7 @@ def main(
     output_fn: Callable[[str], None] = print,
     connection,
     settings: Settings,
-    fetch: Callable = fetch_not_implemented,
+    fetch: Callable = fetch_datasets,
     clock: Callable[[], str] = lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     strategies: tuple[Strategy, ...] | None = None,
     output_root: Path = Path("."),

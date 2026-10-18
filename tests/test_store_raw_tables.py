@@ -19,18 +19,27 @@ class RawTablesTest(unittest.TestCase):
         shutil.rmtree(self.directory, ignore_errors=True)
 
     def _columns(self, table):
-        return [
-            (row[1], row[5])
-            for row in self.connection.execute(f"PRAGMA table_info({table})")
-        ]
+        return [(row[1], row[5]) for row in self.connection.execute(f"PRAGMA table_info({table})")]
 
     def test_raw_tables_have_the_decided_columns_and_primary_keys(self):
         self.assertEqual(
             [name for name, _ in self._columns("stock_basic")],
             [
-                "ts_code", "symbol", "name", "area", "industry", "fullname", "enname",
-                "cnspell", "market", "exchange", "curr_type", "list_status", "list_date",
-                "delist_date", "is_hs",
+                "ts_code",
+                "symbol",
+                "name",
+                "area",
+                "industry",
+                "fullname",
+                "enname",
+                "cnspell",
+                "market",
+                "exchange",
+                "curr_type",
+                "list_status",
+                "list_date",
+                "delist_date",
+                "is_hs",
             ],
         )
         self.assertEqual([pk for _, pk in self._columns("stock_basic")], [1] + [0] * 14)

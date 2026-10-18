@@ -1,13 +1,16 @@
 import shutil
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import pandas as pd
 
 from screener.cli import main
 from screener.config import Settings
-from screener.store import begin_sync, open_database
+from screener.store import begin_sync, open_database, published_datasets
 from screener.strategies.base import Strategy, StrategySpec
+from screener.strategies.episode_01_graham import GrahamStrategy
+from screener.sync.stock_basic import COLUMNS as STOCK_BASIC_COLUMNS
 
 PROXY_URL = "https://tl.kaixin8.top/tushare/sdk"
 
@@ -35,6 +38,28 @@ class ReadyStrategy(Strategy):
 
     def screen(self, frame: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
+
+
+class FakeTushareClient:
+    """最小假客户端：两个接口各回一行，不联网。"""
+
+    def stock_basic(self, **params):
+        return pd.DataFrame(
+            [
+                {
+                    **dict.fromkeys(STOCK_BASIC_COLUMNS, ""),
+                    "ts_code": "000001.SZ",
+                    "list_status": "L",
+                }
+            ],
+            columns=list(STOCK_BASIC_COLUMNS),
+        )
+
+    def trade_cal(self, **params):
+        return pd.DataFrame(
+            [{"exchange": "SSE", "cal_date": "20261016", "is_open": 1, "pretrade_date": ""}],
+            columns=["exchange", "cal_date", "is_open", "pretrade_date"],
+        )
 
 
 class MenuTest(unittest.TestCase):
@@ -115,3 +140,30 @@ class MenuTest(unittest.TestCase):
         text = "\n".join(self.output)
         self.assertIn("缺少 TUSHARE_API_URL，请在 .env 或环境变量中设置", text)
         self.assertNotIn("TUSHARE_TOKEN", text)
+
+    def test_update_uses_the_real_fetcher_by_default(self):
+        values = iter(["1", "1", ""])
+
+        def answer(prompt=""):
+            try:
+                return next(values)
+            except StopIteration:
+                return "0"
+
+        with mock.patch(
+            "screener.sync.pipeline.create_tushare_client",
+            return_value=FakeTushareClient(),
+        ):
+            code = main(
+                input_fn=answer,
+                output_fn=self.output.append,
+                connection=self.connection,
+                settings=settings(),
+                clock=lambda: "2026-10-11 09:00:00",
+                strategies=(GrahamStrategy(),),
+                output_root=self.root,
+            )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(published_datasets(self.connection), frozenset({"股票列表", "交易日历"}))
+        self.assertNotIn("SECRET-TOKEN-VALUE", "\n".join(self.output))

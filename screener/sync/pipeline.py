@@ -6,10 +6,6 @@ from screener.store import begin_sync
 from screener.sync.client import create_tushare_client
 
 
-def fetch_not_implemented(datasets: tuple[str, ...], token: str) -> Mapping[str, int]:
-    raise NotImplementedError("Tushare 同步尚未实现")
-
-
 def sync_all(
     connection: sqlite3.Connection,
     *,

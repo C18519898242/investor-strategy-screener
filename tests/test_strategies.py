@@ -14,7 +14,7 @@ class StrategyRegistryTest(unittest.TestCase):
         self.assertEqual(spec.strategy_id, "episode-01-graham")
         self.assertEqual(spec.menu_name, "格雷厄姆（可用）")
         self.assertEqual(spec.output_dir, "episode-01-graham")
-        self.assertEqual(spec.required_datasets, ())
+        self.assertEqual(spec.required_datasets, ("股票列表", "交易日历"))
         self.assertEqual(spec.display_fields, ())
         with self.assertRaisesRegex(NotImplementedError, "第 1 集筛选尚未实现"):
             strategies[0].screen(pd.DataFrame())

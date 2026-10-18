@@ -43,6 +43,4 @@ class RegistryTest(unittest.TestCase):
         counts = fetch_datasets(self.connection, ("股票列表", "交易日历"), FakeClient())
 
         self.assertEqual(counts, {"股票列表": 1, "交易日历": 1})
-        self.assertEqual(
-            self.connection.execute("SELECT COUNT(*) FROM trade_cal").fetchone(), (1,)
-        )
+        self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM trade_cal").fetchone(), (1,))

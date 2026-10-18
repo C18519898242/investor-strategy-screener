@@ -8,7 +8,7 @@ class GrahamStrategy(Strategy):
         strategy_id="episode-01-graham",
         menu_name="格雷厄姆（可用）",
         output_dir="episode-01-graham",
-        required_datasets=(),
+        required_datasets=("股票列表", "交易日历"),
         display_fields=(),
     )
 

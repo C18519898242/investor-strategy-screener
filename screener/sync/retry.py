@@ -1,10 +1,7 @@
 import time
 from collections.abc import Callable
-from typing import TypeVar
 
 from screener.sync.errors import SyncError
-
-T = TypeVar("T")
 
 RETRYABLE_MARKERS: tuple[str, ...] = (
     "rate_limited",
@@ -16,7 +13,7 @@ RATE_LIMITED_WAIT = 30
 BACKOFF_WAITS = (5, 15)
 
 
-def call_with_retry(
+def call_with_retry[T](
     operation: Callable[[], T],
     *,
     sleep: Callable[[float], None] = time.sleep,
