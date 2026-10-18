@@ -26,10 +26,18 @@ WATER_QUERIES: dict[str, str | None] = {
 }
 
 
+def registered_datasets() -> tuple[str, ...]:
+    """更新菜单列的数据集：登记表里的全部数据集。
+
+    与策略声明无关 —— 菜单回答的是「这个程序能拉什么」，不是「当前策略要什么」。
+    """
+    return tuple(DATASET_FETCHERS)
+
+
 def dataset_water_levels(
     connection: sqlite3.Connection, datasets: tuple[str, ...]
 ) -> Mapping[str, str]:
-    """给每个数据集一句人话的水位，供更新前确认要跳过谁。
+    """给每个数据集一句人话的水位，供更新菜单显示。
 
     未登记的数据名照实说，不在这里报错——报错留给真正抓取时的 `fetch_datasets`。
     """

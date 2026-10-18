@@ -92,30 +92,32 @@ class MenuTest(unittest.TestCase):
 
         self.assertEqual(self.prompts, ["请选择：", "请选择：", "请选择："])
         text = "\n".join(self.output)
-        self.assertIn("1. prices（未登记）", text)
-        self.assertIn("2. financials（未登记）", text)
+        self.assertIn("1. 股票列表（整表替换）", text)
+        self.assertIn("2. 交易日历（无数据，首次全量）", text)
+        self.assertIn("3. 停复牌（无数据，首次全量）", text)
         self.assertIn("0. 返回主菜单", text)
+        self.assertNotIn("prices", text)
 
     def test_picking_one_dataset_fetches_only_that_one(self):
         self._run(["1", "2", "", "0"])
 
-        self.assertEqual(self.fetched, [("financials",)])
+        self.assertEqual(self.fetched, [("交易日历",)])
 
     def test_picking_two_datasets_fetches_each_one(self):
         self._run(["1", "1", "", "2", "", "0"])
 
-        self.assertEqual(self.fetched, [("prices",), ("financials",)])
+        self.assertEqual(self.fetched, [("股票列表",), ("交易日历",)])
 
     def test_the_menu_comes_back_after_each_pick(self):
         self._run(["1", "1", "", "0"])
 
-        self.assertEqual(self.output.count("1. prices（未登记）"), 2)
+        self.assertEqual(self.output.count("1. 股票列表（整表替换）"), 2)
 
     def test_invalid_choice_is_asked_again(self):
         self._run(["1", "9", "2", "", "0"])
 
-        self.assertEqual(self.fetched, [("financials",)])
-        self.assertIn("编号应为 0~2 之间的数字", "\n".join(self.output))
+        self.assertEqual(self.fetched, [("交易日历",)])
+        self.assertIn("编号应为 0~3 之间的数字", "\n".join(self.output))
 
     def test_zero_at_the_dataset_menu_returns_without_fetching(self):
         code = self._run(["1", "0"])
@@ -213,4 +215,4 @@ class MenuTest(unittest.TestCase):
 
         text = self.log_file.read_text(encoding="utf-8")
 
-        self.assertIn("开始同步，数据集：prices", text)
+        self.assertIn("开始同步，数据集：股票列表", text)

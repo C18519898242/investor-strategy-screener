@@ -10,7 +10,7 @@ from screener.logging import setup_logging
 from screener.report import render_html, write_result
 from screener.store import last_successful_sync_at, published_datasets
 from screener.strategies import Strategy, load_builtin_strategies
-from screener.sync import dataset_water_levels, fetch_datasets, sync_all
+from screener.sync import dataset_water_levels, fetch_datasets, registered_datasets, sync_all
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ def main(
         output_fn("0. 退出")
         choice = input_fn("请选择：")
         if choice == "1":
-            code = _sync_menu(connection, strategies, settings, fetch, clock, input_fn, output_fn)
+            code = _sync_menu(connection, settings, fetch, clock, input_fn, output_fn)
         elif choice == "2":
             code = _screen_menu(connection, strategies, output_root, input_fn, output_fn)
         elif choice == "0":
@@ -68,13 +68,9 @@ def main(
     return 1
 
 
-def _sync_menu(connection, strategies, settings, fetch, clock, input_fn, output_fn) -> int:
-    """列出数据集和各自水位，选一个就只拉那一个；拉完回到这张菜单，0 回主菜单。"""
-    datasets = tuple(
-        dict.fromkeys(
-            dataset for strategy in strategies for dataset in strategy.spec.required_datasets
-        )
-    )
+def _sync_menu(connection, settings, fetch, clock, input_fn, output_fn) -> int:
+    """列出登记的数据集和各自水位，选一个就只拉那一个；拉完回到这张菜单，0 回主菜单。"""
+    datasets = registered_datasets()
     while True:
         levels = dataset_water_levels(connection, datasets)
         output_fn("更新本地数据")

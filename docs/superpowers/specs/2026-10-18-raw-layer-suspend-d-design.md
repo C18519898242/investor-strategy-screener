@@ -31,7 +31,7 @@ D6 规定策略文件只登记数据名，不出现接口名。本轮新增一�
 
 映射加进 `sync/registry.py` 的 `DATASET_FETCHERS`。
 
-**登记范围由 mock 策略兜住**：`screener/strategies/mock_all_datasets.py`（本轮新增，已落地）登记全部数据集，而 `cli._sync_menu` 算「更新范围」是对**所有策略取并集**，所以「停复牌」会自动进入更新范围，不需要动 Graham 的 `required_datasets`。mock 的数据名是写死的、不 `import sync.registry`（从 strategies 导入 sync 子模块会连带把 tushare 拉进进程，破坏分层），由 `tests/test_strategies.py` 断言它必须等于 registry 的登记表——所以加「停复牌」时这两处都要改，漏改会直接测试失败。
+**登记范围只看 registry**：`cli._sync_menu` 列的是 `sync/registry.py` 里 `DATASET_FETCHERS` 的全部数据集（`registered_datasets()`），与策略声明无关，所以「停复牌」进了登记表就自动出现在更新菜单里，不需要动任何策略。（2026-10-18 之前这里是对所有策略的 `required_datasets` 取并集，靠一个登记了全部数据集的 mock 策略兜住；菜单改成「选一个拉一个」之后，这层间接就删掉了。）
 
 ## 3. 一张表
 
@@ -119,10 +119,9 @@ screener/sync/suspend_d.py     # DATASET = "停复牌"、COLUMNS、fetch_suspend
 
 ## 7. 接线改动
 
-- `screener/sync/registry.py`：`DATASET_FETCHERS` 增加 `"停复牌"`。
-- `screener/strategies/mock_all_datasets.py`：`required_datasets` 增加 `"停复牌"`（不加以防漂移的断言会失败）。
+- `screener/sync/registry.py`：`DATASET_FETCHERS` 和 `WATER_QUERIES` 各增加一行 `"停复牌"`。
 - `cli.py`、`pipeline.py`、`main.py` 不改。
-- Graham 的 `required_datasets` 不改。
+- 策略的 `required_datasets` 不改：更新菜单只看 registry，策略声明只用于筛股前的就绪检查。
 
 ## 8. 需要同步修改的既有文档
 
@@ -142,7 +141,7 @@ screener/sync/suspend_d.py     # DATASET = "停复牌"、COLUMNS、fetch_suspend
 | `pipeline` | `publish()` 之前写入都未提交（`in_transaction` 为真）；`abort()` 会提交已写入的行 |
 | `sync/suspend_d` | 表为空时从 11 年前起、按 27 天切段；有水位时只删水位那一天并从该天起切；每段都显式传 `fields`；**写入前按 `trade_date` 升序**（注入乱序的假响应，断言写入顺序有序）；不传 `suspend_type`；返回计数正确 |
 | `sync/registry` | 「停复牌」能分发到 `fetch_suspend_d` |
-| `strategies` | mock 策略的 `required_datasets` 等于 registry 的登记表（已落地，本轮会因新增数据名而必须同步改） |
+| `strategies` | 内置策略表只含 Graham（联调用的 mock 策略已删）；`required_datasets` 只喂筛股的就绪检查，不影响更新菜单 |
 | `cli` | 更新流程端到端可用，输出不含 token |
 
 **未测完的数字**：首次回填的总行数。第十九轮探针（`probe_apis19.py`）跑到 2017Q4 被叫停，只留下 9 个季度的部分结果（合计 143,829 行）。这个数字**不影响设计**——分片粒度由截断边界决定，与总行数无关——只在评估耗时与库体积时需要，本轮不追。
