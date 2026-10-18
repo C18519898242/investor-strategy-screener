@@ -10,6 +10,7 @@ __pycache__/
 .env
 data/*.sqlite3
 outputs/
+logs/
 test-temp/
 
 # 本机环境与工具缓存，不提交。
