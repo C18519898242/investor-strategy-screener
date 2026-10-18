@@ -3,7 +3,7 @@ import sqlite3
 import unittest
 from pathlib import Path
 
-from screener.store import begin_sync, delete_rows, insert_rows, open_database, replace_rows
+from screener.store import delete_rows, insert_rows, open_database, replace_rows
 
 CALENDAR_COLUMNS = ("exchange", "cal_date", "is_open", "pretrade_date")
 SUSPEND_D_COLUMNS = ("ts_code", "trade_date", "suspend_timing", "suspend_type")
@@ -161,22 +161,15 @@ class RawTablesTest(unittest.TestCase):
 
         self.assertEqual(self.connection.execute("SELECT * FROM suspend_d").fetchall(), first)
 
-    def test_abort_commits_the_partial_write_but_a_plain_write_does_not(self):
-        self.assertFalse(self.connection.in_transaction)
-
-        batch = begin_sync(self.connection)
-        self.assertFalse(self.connection.in_transaction)
+    def test_a_plain_write_is_on_disk_immediately(self):
         insert_rows(
             self.connection,
             table="suspend_d",
             columns=SUSPEND_D_COLUMNS,
             rows=[("000001.SZ", "20261016", None, "S")],
         )
-        self.assertTrue(self.connection.in_transaction)
 
-        batch.abort()
         self.assertFalse(self.connection.in_transaction)
-
         reopened = sqlite3.connect(self.directory / "screener.sqlite3")
         try:
             self.assertEqual(reopened.execute("SELECT COUNT(*) FROM suspend_d").fetchone(), (1,))

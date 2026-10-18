@@ -1,4 +1,5 @@
 import shutil
+import sqlite3
 import unittest
 from datetime import date
 from pathlib import Path
@@ -21,6 +22,19 @@ class FakeClient:
         start, end = params["start_date"], params["end_date"]
         picked = [row for row in self.rows if start <= row["trade_date"] <= end]
         return pd.DataFrame(list(reversed(picked)), columns=params["fields"].split(","))
+
+
+class InterruptingClient(FakeClient):
+    """第 N 次调用直接抛 KeyboardInterrupt，模拟 Ctrl+C 打断。"""
+
+    def __init__(self, rows=(), *, interrupt_on):
+        super().__init__(rows)
+        self.interrupt_on = interrupt_on
+
+    def suspend_d(self, **params):
+        if len(self.calls) + 1 == self.interrupt_on:
+            raise KeyboardInterrupt
+        return super().suspend_d(**params)
 
 
 def row(trade_date, **overrides):
@@ -74,6 +88,21 @@ class SuspendDTest(unittest.TestCase):
             captured.output[-1],
             "INFO:screener.sync.suspend_d:停复牌 已补到 20261018（第 149/149 段）",
         )
+
+    def test_chunks_written_before_an_interruption_stay_on_disk(self):
+        client = InterruptingClient([row("20151020")], interrupt_on=3)
+
+        with self.assertRaises(KeyboardInterrupt):
+            fetch_suspend_d(self.connection, client, today=date(2026, 10, 18))
+
+        reopened = sqlite3.connect(self.directory / "screener.sqlite3", timeout=0.2)
+        try:
+            self.assertEqual(
+                reopened.execute("SELECT trade_date FROM suspend_d").fetchall(),
+                [("20151020",)],
+            )
+        finally:
+            reopened.close()
 
     def test_water_level_day_is_deleted_and_chunking_starts_there(self):
         client = FakeClient([row("20211001"), row("20211005")])

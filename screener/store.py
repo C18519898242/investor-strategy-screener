@@ -22,19 +22,18 @@ class SyncBatch:
             "UPDATE sync_batch SET state = 'published', finished_at = ? WHERE batch_id = ?",
             (finished_at, self._batch_id),
         )
-        self._connection.commit()
 
     def abort(self) -> None:
         self._connection.execute(
             "UPDATE sync_batch SET state = 'aborted' WHERE batch_id = ?",
             (self._batch_id,),
         )
-        self._connection.commit()
 
 
 def open_database(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(path)
+    # autocommit：不引入事务。中断只留下「已写前缀」，重跑一遍覆盖掉。
+    connection = sqlite3.connect(path, isolation_level=None)
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS sync_batch (
@@ -100,7 +99,6 @@ def open_database(path: Path) -> sqlite3.Connection:
         """
     )
     connection.execute("CREATE INDEX IF NOT EXISTS suspend_d_trade_date ON suspend_d (trade_date)")
-    connection.commit()
     return connection
 
 
@@ -111,7 +109,7 @@ def insert_rows(
     columns: tuple[str, ...],
     rows: Iterable[Sequence[object]],
 ) -> int:
-    """只插入，不删任何东西；不提交，提交点仍由同步批次决定。"""
+    """只插入，不删任何东西；连接是 autocommit，写完即落盘。"""
     materialized = list(rows)
     placeholders = ", ".join("?" * len(columns))
     connection.executemany(
@@ -122,7 +120,7 @@ def insert_rows(
 
 
 def delete_rows(connection: sqlite3.Connection, *, table: str, column: str, value: object) -> int:
-    """删掉 column = value 的行；不提交，提交点仍由同步批次决定。"""
+    """删掉 column = value 的行；连接是 autocommit，删完即落盘。"""
     cursor = connection.execute(f"DELETE FROM {table} WHERE {column} = ?", (value,))
     logger.debug("%s 删除 %s = %s 的行，共 %d 行", table, column, value, cursor.rowcount)
     return cursor.rowcount
@@ -135,7 +133,7 @@ def replace_rows(
     columns: tuple[str, ...],
     rows: Iterable[Sequence[object]],
 ) -> int:
-    """清空整张表再批量插入；不提交，提交点仍由同步批次决定。"""
+    """清空整张表再批量插入；连接是 autocommit，写完即落盘。"""
     materialized = list(rows)
     connection.execute(f"DELETE FROM {table}")
     count = insert_rows(connection, table=table, columns=columns, rows=materialized)
@@ -179,5 +177,4 @@ def published_datasets(connection: sqlite3.Connection) -> frozenset[str]:
 
 def begin_sync(connection: sqlite3.Connection) -> SyncBatch:
     cursor = connection.execute("INSERT INTO sync_batch (state) VALUES ('open')")
-    connection.commit()
     return SyncBatch(connection, cursor.lastrowid)
