@@ -1,0 +1,24 @@
+=== 健康检查 ===
+        健康检查成功
+
+=== 1. 单日耗时是否稳定（20261016 连打两次，再换两天）===
+    daily_basic(trade_date=20261016) -> 5567 行，耗时 27.6 秒
+    daily_basic(trade_date=20261016) -> 5567 行，耗时 17.3 秒
+    daily_basic(trade_date=20261015) -> 5565 行，耗时 18.7 秒
+    daily_basic(trade_date=20261014) -> 5563 行，耗时 38.3 秒
+
+=== 2. 逐股路线：ts_code + start_date/end_date ===
+    daily_basic(ts_code=600519.SH, 20151019~20261016) 第 1 次失败：[upstream_pool_exhausted] 数据当前不可用，请稍后重试；建议等待30秒后重试；request_id=64cfc82c74f5484f9f
+    daily_basic(ts_code=600519.SH, 20151019~20261016) -> 2672 行，耗时 16.4 秒
+    daily_basic(ts_code=600519.SH,000001.SZ, 20151019~20261016) 第 1 次失败：[date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分页语义；request_id=de5a09324f
+    daily_basic(ts_code=600519.SH,000001.SZ, 20151019~20261016) 第 2 次失败：[date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分页语义；request_id=341fc4ba68
+    daily_basic(ts_code=600519.SH,000001.SZ, 20151019~20261016) 第 3 次失败：[date_range_too_large] 历史区间超过单次安全范围，请按日期分段，并保持原fields和分页语义；request_id=966b6dc8a7
+
+=== 3. 结论数字 ===
+    单日调用耗时（4 次）：['27.6', '17.3', '18.7', '38.3'] 秒
+    中位数 27.6 秒 → 2700 个交易日 ≈ 20.7 小时
+    单只股票 11 年：2672 行，耗时 16.4 秒
+        交易日数 2672，覆盖 20151019~20261016
+        → 5577 只逐股 ≈ 25.5 小时
+
+探针结束。

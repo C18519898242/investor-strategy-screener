@@ -1,0 +1,33 @@
+=== 健康检查 ===
+        健康检查成功
+
+=== 1. 只给 trade_date=20261016（不给 ts_code、不给 start/end）===
+    daily_basic(trade_date=…) -> 5567 行，18 列，耗时 23.4 秒
+        columns = ['ts_code', 'trade_date', 'close', 'turnover_rate', 'turnover_rate_f', 'volume_ratio', 'pe', 'pe_ttm', 'pb', 'ps', 'ps_ttm', 'dv_ratio', 'dv_ttm', 'total_share', 'float_share', 'free_share', 'total_mv', 'circ_mv']
+
+=== 2. 当日上市名单与停牌名单 ===
+    stock_basic(list_status=L) -> 5577 行，2 列，耗时 3.1 秒
+        columns = ['ts_code', 'name']
+    suspend_d(trade_date=…) -> 11 行，3 列，耗时 1.5 秒
+        columns = ['ts_code', 'trade_date', 'suspend_type']
+
+=== 3. 覆盖率：是不是全部一天的股票 ===
+    daily_basic 返回      5567 只
+    当日上市（list_status=L）5577 只
+    当日停牌（suspend_d）  11 只
+    上市有、daily_basic 没有：10 只
+        其中在停牌名单里：10 只
+        不在停牌名单里（前 20）：['000016.SZ', '002388.SZ', '002717.SZ', '002731.SZ', '300773.SZ', '301314.SZ', '600293.SH', '601059.SH', '601198.SH', '688496.SH']
+    daily_basic 有、上市名单没有：0 只
+    (ts_code, trade_date) 重复行：0
+    ^ 缺的恰好全是停牌股：返回的就是当日全部有行情的股票
+
+=== 4. 多天窗口 20261012~20261016（默认字段）===
+    daily_basic(start_date/end_date) 第 1 次失败：[invalid_params] 业务参数缺失或格式不合法；request_id=796c3a26bf17437890d12ee3acd5d464
+    daily_basic(start_date/end_date) 第 2 次失败：[invalid_params] 业务参数缺失或格式不合法；request_id=9757df5f5e92422bb5742861cdc15f55
+    daily_basic(start_date/end_date) 第 3 次失败：[invalid_params] 业务参数缺失或格式不合法；request_id=9bad4878771a4bebaea61afba3d946b6
+
+=== 5. 耗时汇总 ===
+    单日一次调用 23.4 秒；2700 个交易日 ≈ 17.5 小时
+
+探针结束。
