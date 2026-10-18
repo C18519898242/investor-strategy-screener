@@ -1,7 +1,13 @@
+import logging
 import sqlite3
+import time
+
+import pandas as pd
 
 from screener.store import replace_rows
 from screener.sync.retry import call_with_retry
+
+logger = logging.getLogger(__name__)
 
 DATASET = "股票列表"
 COLUMNS: tuple[str, ...] = (
@@ -29,6 +35,18 @@ MERGE_KEY = "ts_code"
 FIELD_LIMIT = 13
 
 
+def _fetch_page(client: object, fields: tuple[str, ...]) -> pd.DataFrame:
+    """取一页字段，并在调用前后各留一条 DEBUG。"""
+    logger.debug("stock_basic 请求：list_status=L, exchange=, fields=%d 个", len(fields))
+    started = time.perf_counter()
+    frame = call_with_retry(
+        lambda: client.stock_basic(exchange="", list_status="L", fields=",".join(fields))
+    )
+    elapsed = time.perf_counter() - started
+    logger.debug("stock_basic 返回 %d 行，耗时 %.1f 秒", len(frame), elapsed)
+    return frame
+
+
 def fetch_stock_basic(connection: sqlite3.Connection, client: object) -> int:
     """只取在市股票：整表替换。
 
@@ -36,12 +54,8 @@ def fetch_stock_basic(connection: sqlite3.Connection, client: object) -> int:
     """
     head = COLUMNS[:FIELD_LIMIT]
     tail = (MERGE_KEY, *COLUMNS[FIELD_LIMIT:])
-    head_frame = call_with_retry(
-        lambda: client.stock_basic(exchange="", list_status="L", fields=",".join(head))
-    )
-    tail_frame = call_with_retry(
-        lambda: client.stock_basic(exchange="", list_status="L", fields=",".join(tail))
-    )
+    head_frame = _fetch_page(client, head)
+    tail_frame = _fetch_page(client, tail)
     frame = head_frame.merge(tail_frame, on=MERGE_KEY, how="left")
     selected = frame[list(COLUMNS)]
     rows = selected.astype(object).where(selected.notna(), None)

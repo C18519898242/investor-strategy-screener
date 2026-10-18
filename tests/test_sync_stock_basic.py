@@ -81,3 +81,18 @@ class StockBasicTest(unittest.TestCase):
         self.assertEqual(
             self.connection.execute("SELECT delist_date FROM stock_basic").fetchone(), (None,)
         )
+
+    def test_logs_request_and_response_for_both_calls(self):
+        client = FakeTushareClient(stock_basic_rows=[stock_basic_row(ts_code="000001.SZ")])
+
+        with self.assertLogs("screener.sync.stock_basic", level="DEBUG") as captured:
+            fetch_stock_basic(self.connection, client)
+
+        requests = [line for line in captured.output if "请求" in line]
+        responses = [line for line in captured.output if "返回" in line]
+
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(len(responses), 2)
+        self.assertIn("fields=13 个", requests[0])
+        self.assertIn("fields=3 个", requests[1])
+        self.assertTrue(all("耗时" in line for line in responses))

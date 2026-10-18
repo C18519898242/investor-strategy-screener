@@ -1,6 +1,9 @@
+import logging
 import sqlite3
 from collections.abc import Iterable, Sequence
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class SyncBatch:
@@ -104,6 +107,7 @@ def replace_rows(
         f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders})",
         materialized,
     )
+    logger.debug("%s 清空旧数据，写入 %d 行", table, len(materialized))
     return len(materialized)
 
 
