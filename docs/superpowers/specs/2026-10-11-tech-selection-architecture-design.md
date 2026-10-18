@@ -127,7 +127,7 @@ Tushare ──同步（联网）──▶ 原始层（通用，store）──筛
 
 | 要拉的数据 | 水位 | 增量方式 |
 | --- | --- | --- |
-| 日频：`daily_basic`、`daily`、`adj_factor` | `MAX(trade_date)` | 用交易日历定出缺失交易日，逐日补（1 次/天） |
+| 日频：`daily_basic`、`daily`、`adj_factor` | `MAX(trade_date)` | 用交易日历定出缺失交易日，逐日补（日常 1 次/天）。`daily_basic` 的待补集合是「日历里的交易日」减去「库里已有行的日期」，所以首次回填起点是日历的最早交易日（当前 2015-10-18）；首次约 2700 次 ≈ **13～29 小时** |
 | 分红：`dividend` | `MAX(ann_date)` | 按 `ann_date` 逐日取全市场 |
 | 财务四表 | 逐股已取到的报告期 | `disclosure_date(actual_date=当日)` 取当天披露名单，再逐股拉 |
 | 状态类：`stock_basic`、`namechange` | 快照 | 每次全量重拉 |
