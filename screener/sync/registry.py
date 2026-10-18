@@ -5,6 +5,8 @@ from collections.abc import Callable, Mapping
 from screener.sync.errors import SyncError
 from screener.sync.stock_basic import DATASET as STOCK_BASIC_DATASET
 from screener.sync.stock_basic import fetch_stock_basic
+from screener.sync.suspend_d import DATASET as SUSPEND_D_DATASET
+from screener.sync.suspend_d import fetch_suspend_d
 from screener.sync.trade_cal import DATASET as TRADE_CAL_DATASET
 from screener.sync.trade_cal import fetch_trade_cal
 
@@ -13,6 +15,7 @@ logger = logging.getLogger(__name__)
 DATASET_FETCHERS: dict[str, Callable[[sqlite3.Connection, object], int]] = {
     STOCK_BASIC_DATASET: fetch_stock_basic,
     TRADE_CAL_DATASET: fetch_trade_cal,
+    SUSPEND_D_DATASET: fetch_suspend_d,
 }
 
 

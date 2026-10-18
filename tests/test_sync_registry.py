@@ -8,10 +8,17 @@ from screener.sync.registry import fetch_datasets
 from tests.tushare_fakes import FakeTushareClient, stock_basic_row
 
 TRADE_CAL_ROWS = [{"exchange": "SSE", "cal_date": "20261016", "is_open": 1, "pretrade_date": ""}]
+SUSPEND_D_ROWS = [
+    {"ts_code": "000001.SZ", "trade_date": "20261016", "suspend_timing": None, "suspend_type": "S"}
+]
 
 
 def fake_client():
-    return FakeTushareClient(stock_basic_rows=[stock_basic_row()], trade_cal_rows=TRADE_CAL_ROWS)
+    return FakeTushareClient(
+        stock_basic_rows=[stock_basic_row()],
+        trade_cal_rows=TRADE_CAL_ROWS,
+        suspend_d_rows=SUSPEND_D_ROWS,
+    )
 
 
 class RegistryTest(unittest.TestCase):
@@ -30,14 +37,15 @@ class RegistryTest(unittest.TestCase):
             fetch_datasets(self.connection, ("不存在的数据",), fake_client())
 
     def test_dispatches_every_registered_dataset(self):
-        counts = fetch_datasets(self.connection, ("股票列表", "交易日历"), fake_client())
+        counts = fetch_datasets(self.connection, ("股票列表", "交易日历", "停复牌"), fake_client())
 
-        self.assertEqual(counts, {"股票列表": 1, "交易日历": 1})
+        self.assertEqual(counts, {"股票列表": 1, "交易日历": 1, "停复牌": 1})
         self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM trade_cal").fetchone(), (1,))
+        self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM suspend_d").fetchone(), (1,))
 
     def test_logs_progress_for_every_dataset(self):
         with self.assertLogs("screener.sync.registry", level="INFO") as captured:
-            fetch_datasets(self.connection, ("股票列表", "交易日历"), fake_client())
+            fetch_datasets(self.connection, ("股票列表", "交易日历", "停复牌"), fake_client())
 
         self.assertEqual(
             captured.output,
@@ -46,6 +54,8 @@ class RegistryTest(unittest.TestCase):
                 "INFO:screener.sync.registry:股票列表 完成：1 行",
                 "INFO:screener.sync.registry:开始拉取 交易日历",
                 "INFO:screener.sync.registry:交易日历 完成：1 行",
+                "INFO:screener.sync.registry:开始拉取 停复牌",
+                "INFO:screener.sync.registry:停复牌 完成：1 行",
             ],
         )
 

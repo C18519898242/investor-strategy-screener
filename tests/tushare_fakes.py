@@ -23,9 +23,10 @@ def stock_basic_row(**overrides):
 class FakeTushareClient:
     """按 `fields` 裁剪列的假客户端，不联网。"""
 
-    def __init__(self, *, stock_basic_rows=(), trade_cal_rows=()):
+    def __init__(self, *, stock_basic_rows=(), trade_cal_rows=(), suspend_d_rows=()):
         self.stock_basic_rows = list(stock_basic_rows)
         self.trade_cal_rows = list(trade_cal_rows)
+        self.suspend_d_rows = list(suspend_d_rows)
         self.calls = []
 
     def stock_basic(self, **params):
@@ -36,6 +37,15 @@ class FakeTushareClient:
 
     def trade_cal(self, **params):
         return self._slice(self.trade_cal_rows, self._record("trade_cal", params))
+
+    def suspend_d(self, **params):
+        fields = self._record("suspend_d", params)
+        picked = [
+            row
+            for row in self.suspend_d_rows
+            if params["start_date"] <= row["trade_date"] <= params["end_date"]
+        ]
+        return self._slice(picked, fields)
 
     def _record(self, api_name, params):
         self.calls.append((api_name, params))

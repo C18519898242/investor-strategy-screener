@@ -21,7 +21,7 @@ class MockAllDatasetsStrategy(Strategy):
         strategy_id="mock-all-datasets",
         menu_name="【联调】全部数据集",
         output_dir="mock-all-datasets",
-        required_datasets=("股票列表", "交易日历"),
+        required_datasets=("股票列表", "交易日历", "停复牌"),
         display_fields=(),
     )
 
