@@ -111,6 +111,7 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 - 字段（**实测**）：`ts_code, symbol, name, area, industry, fullname, enname, cnspell, market, exchange, curr_type, list_status, list_date, delist_date, is_hs`。
 - **实测**：`list_status='L'` → 5577 行；`list_status='D'` → 339 行；`list_status='P'` → 0 行；`exchange='SSE'` → 2467 行。
 - **必须显式传 `fields`**：不传就报 `invalid_params`（见 6.1）。
+- **`fields` 最多 13 个**（**实测 2026-10-18**）：13 个（字符串长度 113）成功、14 个（长度 111）报 `invalid_params`——卡的是**个数**不是字符串长度，`fields='*'` 也报错。要取全部 15 列必须拆成两次调用再按 `ts_code` 合并。该上限是 `stock_basic` 特有的：同一次实测里 `daily_basic` 取 14 个字段正常返回 5567 行。
 - 官方限量"每次最多 6000 行"，实测 5577 行未触顶，但股票数增长后会触顶（**官方+实测**）。
 
 #### `stock_st`（[doc_id=397](https://tushare.pro/document/2?doc_id=397)）—— **已决定不接入**（2026-10-18）
@@ -292,7 +293,7 @@ uv run --locked python -u docs/tushare-api-evidence/probe_apis.py
 
 | 错误码 | 含义 | 实测触发 | 实现要求 |
 | --- | --- | --- | --- |
-| `invalid_params` | 业务参数缺失或格式不合法 | **不传 `fields`** 的 `stock_basic`/`index_classify`；`exchange=''`；`index_member_all(l1_code=..., is_new='N')`；**财报区间查询不带 `ts_code`** | **所有调用显式传 `fields`**；不要传空字符串参数；**财报必须逐股取** |
+| `invalid_params` | 业务参数缺失或格式不合法 | **不传 `fields`** 的 `stock_basic`/`index_classify`；**`stock_basic` 的 `fields` 超过 13 个**（见 4.1）；`exchange=''`（`stock_basic` 实测无害，见 4.1）；`index_member_all(l1_code=..., is_new='N')`；**财报区间查询不带 `ts_code`** | **所有调用显式传 `fields`**；**`stock_basic` 的 `fields` 拆到 ≤13 个**；不要传空字符串参数；**财报必须逐股取** |
 | `unknown_api` | 接口不存在或未开放 | `income_vip`、`balancesheet_vip`、`fina_indicator_vip` | **不能依赖全市场财报批量接口**，必须逐股循环 |
 | `date_range_too_large` | 历史区间超过单次安全范围 | `income` 按公告日跨 2.75 年；**财报跨 18 个月 / 2 年 / 30 个月** | 财报按**年**分段（实测 1 年安全，1 年 = 上限） |
 | `rate_limited` | 请求额度达到限制，建议等 30 秒 | 连续调用 `stock_basic` 多值 `list_status` | 需要**退避重试**（30 秒级） |

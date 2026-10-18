@@ -2,29 +2,9 @@ import shutil
 import unittest
 from pathlib import Path
 
-import pandas as pd
-
 from screener.store import open_database
 from screener.sync.stock_basic import COLUMNS, fetch_stock_basic
-
-
-class FakeClient:
-    def __init__(self, frame):
-        self.frame = frame
-        self.calls = []
-
-    def stock_basic(self, **params):
-        self.calls.append(params)
-        return self.frame
-
-
-def row(**overrides):
-    """一行 15 列、默认全是空串的股票，只覆盖关心的字段。"""
-    return {**dict.fromkeys(COLUMNS, ""), **overrides}
-
-
-def frame_of(rows):
-    return pd.DataFrame(rows, columns=list(COLUMNS))
+from tests.tushare_fakes import STOCK_BASIC_FIELD_LIMIT, FakeTushareClient, stock_basic_row
 
 
 class StockBasicTest(unittest.TestCase):
@@ -38,37 +18,55 @@ class StockBasicTest(unittest.TestCase):
         self.connection.close()
         shutil.rmtree(self.directory, ignore_errors=True)
 
-    def test_fetches_listed_stocks_in_a_single_call_with_explicit_fields(self):
-        client = FakeClient(frame_of([row(ts_code="000001.SZ")]))
+    def test_splits_the_field_list_to_stay_within_the_proxy_limit(self):
+        client = FakeTushareClient(stock_basic_rows=[stock_basic_row(ts_code="000001.SZ")])
 
         fetch_stock_basic(self.connection, client)
 
-        self.assertEqual(len(client.calls), 1)
-        self.assertEqual(client.calls[0]["list_status"], "L")
-        self.assertEqual(client.calls[0]["exchange"], "")
-        self.assertEqual(client.calls[0]["fields"], ",".join(COLUMNS))
+        sent = [
+            params["fields"].split(",")
+            for api_name, params in client.calls
+            if api_name == "stock_basic"
+        ]
+        self.assertEqual(len(sent), 2)
+        for fields in sent:
+            self.assertLessEqual(len(fields), STOCK_BASIC_FIELD_LIMIT)
+        sent_sets = [set(fields) for fields in sent]
+        self.assertEqual(set().union(*sent_sets), set(COLUMNS))
+        self.assertEqual(set.intersection(*sent_sets), {"ts_code"})
+        for _, params in client.calls:
+            self.assertEqual(params["list_status"], "L")
+            self.assertEqual(params["exchange"], "")
 
     def test_writes_the_rows_and_returns_the_count(self):
         rows = [
-            row(ts_code="000001.SZ", name="平安银行", list_status="L"),
-            row(ts_code="600000.SH", name="浦发银行", list_status="L"),
+            stock_basic_row(ts_code="000001.SZ", name="平安银行", list_status="L", is_hs="N"),
+            stock_basic_row(ts_code="600000.SH", name="浦发银行", list_status="L", is_hs="N"),
         ]
 
-        count = fetch_stock_basic(self.connection, FakeClient(frame_of(rows)))
+        count = fetch_stock_basic(self.connection, FakeTushareClient(stock_basic_rows=rows))
 
         self.assertEqual(count, 2)
         self.assertEqual(
             self.connection.execute(
-                "SELECT ts_code, name FROM stock_basic ORDER BY ts_code"
+                "SELECT ts_code, name, list_status, is_hs FROM stock_basic ORDER BY ts_code"
             ).fetchall(),
-            [("000001.SZ", "平安银行"), ("600000.SH", "浦发银行")],
+            [("000001.SZ", "平安银行", "L", "N"), ("600000.SH", "浦发银行", "L", "N")],
         )
 
     def test_a_second_run_replaces_the_previous_rows(self):
-        fetch_stock_basic(self.connection, FakeClient(frame_of([row(ts_code="000001.SZ")])))
         fetch_stock_basic(
             self.connection,
-            FakeClient(frame_of([row(ts_code="000001.SZ"), row(ts_code="600000.SH")])),
+            FakeTushareClient(stock_basic_rows=[stock_basic_row(ts_code="000001.SZ")]),
+        )
+        fetch_stock_basic(
+            self.connection,
+            FakeTushareClient(
+                stock_basic_rows=[
+                    stock_basic_row(ts_code="000001.SZ"),
+                    stock_basic_row(ts_code="600000.SH"),
+                ]
+            ),
         )
 
         self.assertEqual(
@@ -76,9 +74,9 @@ class StockBasicTest(unittest.TestCase):
         )
 
     def test_missing_values_become_null_not_the_string_nan(self):
-        rows = [row(ts_code="000001.SZ", delist_date=float("nan"))]
+        rows = [stock_basic_row(ts_code="000001.SZ", delist_date=float("nan"))]
 
-        fetch_stock_basic(self.connection, FakeClient(frame_of(rows)))
+        fetch_stock_basic(self.connection, FakeTushareClient(stock_basic_rows=rows))
 
         self.assertEqual(
             self.connection.execute("SELECT delist_date FROM stock_basic").fetchone(), (None,)

@@ -10,9 +10,11 @@ from screener.config import Settings
 from screener.store import begin_sync, open_database, published_datasets
 from screener.strategies.base import Strategy, StrategySpec
 from screener.strategies.episode_01_graham import GrahamStrategy
-from screener.sync.stock_basic import COLUMNS as STOCK_BASIC_COLUMNS
+from tests.tushare_fakes import FakeTushareClient, stock_basic_row
 
 PROXY_URL = "https://tl.kaixin8.top/tushare/sdk"
+
+TRADE_CAL_ROWS = [{"exchange": "SSE", "cal_date": "20261016", "is_open": 1, "pretrade_date": ""}]
 
 
 def settings(
@@ -38,28 +40,6 @@ class ReadyStrategy(Strategy):
 
     def screen(self, frame: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
-
-
-class FakeTushareClient:
-    """最小假客户端：两个接口各回一行，不联网。"""
-
-    def stock_basic(self, **params):
-        return pd.DataFrame(
-            [
-                {
-                    **dict.fromkeys(STOCK_BASIC_COLUMNS, ""),
-                    "ts_code": "000001.SZ",
-                    "list_status": "L",
-                }
-            ],
-            columns=list(STOCK_BASIC_COLUMNS),
-        )
-
-    def trade_cal(self, **params):
-        return pd.DataFrame(
-            [{"exchange": "SSE", "cal_date": "20261016", "is_open": 1, "pretrade_date": ""}],
-            columns=["exchange", "cal_date", "is_open", "pretrade_date"],
-        )
 
 
 class MenuTest(unittest.TestCase):
@@ -150,9 +130,14 @@ class MenuTest(unittest.TestCase):
             except StopIteration:
                 return "0"
 
+        client = FakeTushareClient(
+            stock_basic_rows=[stock_basic_row(ts_code="000001.SZ", list_status="L")],
+            trade_cal_rows=TRADE_CAL_ROWS,
+        )
+
         with mock.patch(
             "screener.sync.pipeline.create_tushare_client",
-            return_value=FakeTushareClient(),
+            return_value=client,
         ):
             code = main(
                 input_fn=answer,

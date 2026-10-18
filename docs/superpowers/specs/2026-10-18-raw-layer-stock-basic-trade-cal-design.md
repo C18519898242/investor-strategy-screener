@@ -102,9 +102,11 @@ DELETE FROM <表>;
 
 **客户端**：`ts.pro_api(token, timeout=120)`。默认 30 秒不够（评估报告第 6 节：`daily` 不传 `fields` 就 30 秒超时）。
 
-**`stock_basic`**：只拉 `list_status='L'`（在市），**一次调用**，实测 5577 行。`D`（退市）、`P`（暂停上市）不拉——需求不关心这两类。
+**`stock_basic`**：只拉 `list_status='L'`（在市），实测 5577 行。`D`（退市）、`P`（暂停上市）不拉——需求不关心这两类。
 
-- **显式传 `fields`**，列出上表全部 15 列。不传 `fields` 会被代理判 `invalid_params`（评估报告第 6 节）。
+- **显式传 `fields`**，不传会被代理判 `invalid_params`（评估报告第 6 节）。
+- **15 列必须拆成两次调用**：代理对 `stock_basic` 的 `fields` 上限是 **13 个**。实测（2026-10-18）：13 个字段（字符串长度 113）成功，14 个（长度 111）报 `invalid_params`——卡的是**个数**不是长度，`fields='*'` 也报错。因此前 13 列一次、`ts_code` + 后 2 列一次，按 `ts_code` 合并。两次调用实测都返回 5577 行且 `ts_code` 集合一致。
+  - 这个上限是 `stock_basic` 特有的：同一次实测里 `daily_basic` 取 14 个字段正常返回 5567 行。
 - 实测（2026-10-18）：传 `list_status` 时返回的每一行都是该状态，响应内 `ts_code` 不重复；不传 `list_status` 只回 `L`（官方默认值就是 `L`）。所以主键取 `ts_code` 安全。
 - 副作用，接受：表里只有当前在市的股票，`delist_date` 全为空，历史筛选日的股票池无法从这张表重建。
 
@@ -161,7 +163,7 @@ spec 的章节编号一律不动，`data-model-proposal.md` 等按章节号引�
 | 层 | 要验证的行为 |
 | --- | --- |
 | `store` | 两张表能建起来；写入是"删空 + 批量插入"，跑两次结果一致（不重复、不报错）；第二次写入会清掉上一次有、这一次没有的行；`trade_cal` 的主键含 `exchange` |
-| `sync/stock_basic` | 只调用一次且 `list_status='L'`；显式传了 `fields`；行数写进库；返回计数正确 |
+| `sync/stock_basic` | 每次调用都 `list_status='L'`，且 `fields` 不超过 13 个、两次调用的并集覆盖全部 15 列、交集只有 `ts_code`；行数写进库；返回计数正确 |
 | `sync/trade_cal` | 参数是 `exchange='SSE'`、区间为运行日往前 11 年、显式 `fields`；行数写进库 |
 | `sync/registry` | 未登记的数据名抛 `SyncError` |
 | `sync/retry` | 前两次抛 `rate_limited`、第三次成功时，尝试次数与等待时长符合上表（注入假等待函数） |

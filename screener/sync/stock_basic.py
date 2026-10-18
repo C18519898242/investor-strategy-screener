@@ -23,11 +23,29 @@ COLUMNS: tuple[str, ...] = (
 )
 
 
+MERGE_KEY = "ts_code"
+FIELD_LIMIT = 13
+"""代理对 `stock_basic` 的 `fields` 上限。
+
+2026-10-18 实测：13 个字段（长度 113）成功，14 个（长度 111）报 `invalid_params`，
+所以卡的是**个数**不是字符串长度；`fields='*'` 也报错。
+"""
+
+
 def fetch_stock_basic(connection: sqlite3.Connection, client: object) -> int:
-    """只取在市股票：一次调用、显式列出字段，整表替换。"""
-    frame = call_with_retry(
-        lambda: client.stock_basic(exchange="", list_status="L", fields=",".join(COLUMNS))
+    """只取在市股票：整表替换。
+
+    15 列超过代理的 `fields` 上限，因此拆成两次调用再按 `ts_code` 合并回来。
+    """
+    head = COLUMNS[:FIELD_LIMIT]
+    tail = (MERGE_KEY, *COLUMNS[FIELD_LIMIT:])
+    head_frame = call_with_retry(
+        lambda: client.stock_basic(exchange="", list_status="L", fields=",".join(head))
     )
+    tail_frame = call_with_retry(
+        lambda: client.stock_basic(exchange="", list_status="L", fields=",".join(tail))
+    )
+    frame = head_frame.merge(tail_frame, on=MERGE_KEY, how="left")
     selected = frame[list(COLUMNS)]
     rows = selected.astype(object).where(selected.notna(), None)
     return replace_rows(
