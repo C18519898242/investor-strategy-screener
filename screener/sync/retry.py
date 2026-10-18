@@ -2,7 +2,7 @@ import time
 from collections.abc import Callable
 from typing import TypeVar
 
-from screener.sync.pipeline import SyncError
+from screener.sync.errors import SyncError
 
 T = TypeVar("T")
 

@@ -1,9 +1,9 @@
+import sqlite3
 from collections.abc import Callable, Mapping
 
 from screener.config import Settings
 from screener.store import begin_sync
-from screener.sync.client import read_tushare_config
-from screener.sync.errors import SyncError
+from screener.sync.client import create_tushare_client
 
 
 def fetch_not_implemented(datasets: tuple[str, ...], token: str) -> Mapping[str, int]:
@@ -11,17 +11,17 @@ def fetch_not_implemented(datasets: tuple[str, ...], token: str) -> Mapping[str,
 
 
 def sync_all(
-    connection,
+    connection: sqlite3.Connection,
     *,
     datasets: tuple[str, ...],
     settings: Settings,
-    fetch: Callable[[tuple[str, ...], str], Mapping[str, int]],
+    fetch: Callable[[sqlite3.Connection, tuple[str, ...], object], Mapping[str, int]],
     finished_at: str,
 ) -> str:
-    token, _ = read_tushare_config(settings)
+    client = create_tushare_client(settings)
     batch = begin_sync(connection)
     try:
-        counts = fetch(datasets, token)
+        counts = fetch(connection, datasets, client)
         missing = [dataset for dataset in datasets if dataset not in counts]
         if missing:
             raise RuntimeError("同步结果缺少所需数据")

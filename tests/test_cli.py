@@ -70,7 +70,7 @@ class MenuTest(unittest.TestCase):
             output_root=self.root,
         )
 
-    def _fetch(self, datasets, token):
+    def _fetch(self, connection, datasets, client):
         self.fetch_calls += 1
         return {dataset: 3 for dataset in datasets}
 

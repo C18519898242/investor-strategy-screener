@@ -1,6 +1,6 @@
 import unittest
 
-from screener.sync.pipeline import SyncError
+from screener.sync.errors import SyncError
 from screener.sync.retry import call_with_retry
 
 

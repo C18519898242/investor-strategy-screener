@@ -37,11 +37,11 @@ class SyncOrchestrationTest(unittest.TestCase):
             connection,
             datasets=("prices",),
             settings=settings(),
-            fetch=lambda datasets, token: {"prices": 1},
+            fetch=lambda connection, datasets, client: {"prices": 1},
             finished_at="2026-10-11 09:00:00",
         )
 
-        def fail(datasets, token):
+        def fail(connection, datasets, client):
             raise RuntimeError("upstream failed")
 
         with self.assertRaisesRegex(RuntimeError, "upstream failed"):
@@ -64,11 +64,31 @@ class SyncOrchestrationTest(unittest.TestCase):
                 connection,
                 datasets=("prices",),
                 settings=settings(tushare_token=""),
-                fetch=lambda datasets, token: {},
+                fetch=lambda connection, datasets, client: {},
                 finished_at="2026-10-11 09:00:00",
             )
 
         self.assertIsNone(last_successful_sync_at(connection))
+
+    def test_fetch_receives_the_connection_datasets_and_a_client(self):
+        connection = open_database(self.path)
+        seen = {}
+
+        def fetch(received_connection, datasets, client):
+            seen.update(connection=received_connection, datasets=datasets, client=client)
+            return {"prices": 1}
+
+        sync_all(
+            connection,
+            datasets=("prices",),
+            settings=settings(),
+            fetch=fetch,
+            finished_at="2026-10-11 09:00:00",
+        )
+
+        self.assertIs(seen["connection"], connection)
+        self.assertEqual(seen["datasets"], ("prices",))
+        self.assertIsNotNone(seen["client"])
 
     def test_missing_api_url_does_not_open_batch(self):
         connection = open_database(self.path)
@@ -78,7 +98,7 @@ class SyncOrchestrationTest(unittest.TestCase):
                 connection,
                 datasets=("prices",),
                 settings=settings(tushare_api_url=""),
-                fetch=lambda datasets, token: {},
+                fetch=lambda connection, datasets, client: {},
                 finished_at="2026-10-11 09:00:00",
             )
 
