@@ -107,6 +107,11 @@ class RawTablesTest(unittest.TestCase):
         )
         self.assertEqual([pk for _, pk in self._columns("suspend_d")], [1, 2, 0, 3])
 
+    def test_suspend_d_has_a_trade_date_index(self):
+        names = [row[1] for row in self.connection.execute("PRAGMA index_list('suspend_d')")]
+
+        self.assertIn("suspend_d_trade_date", names)
+
     def test_suspend_d_stores_both_types_on_the_same_day(self):
         insert_rows(
             self.connection,
@@ -120,9 +125,9 @@ class RawTablesTest(unittest.TestCase):
 
         self.assertEqual(
             self.connection.execute(
-                "SELECT suspend_timing, suspend_type FROM suspend_d ORDER BY suspend_type DESC"
+                "SELECT suspend_timing, suspend_type FROM suspend_d ORDER BY suspend_type"
             ).fetchall(),
-            [("09:30-10:00", "S"), (None, "R")],
+            [(None, "R"), ("09:30-10:00", "S")],
         )
 
     def test_delete_rows_removes_only_the_named_day(self):
