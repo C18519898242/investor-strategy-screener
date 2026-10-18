@@ -35,8 +35,11 @@ def fetch_suspend_d(
         delete_rows(connection, table="suspend_d", column="trade_date", value=water)
 
     written = 0
+    total = (end - start).days // CHUNK_DAYS + 1
+    index = 0
     chunk_start = start
     while chunk_start <= end:
+        index += 1
         chunk_end = min(chunk_start + timedelta(days=CHUNK_DAYS - 1), end)
         start_text = chunk_start.strftime("%Y%m%d")
         end_text = chunk_end.strftime("%Y%m%d")
@@ -60,6 +63,7 @@ def fetch_suspend_d(
             columns=COLUMNS,
             rows=rows.itertuples(index=False, name=None),
         )
+        logger.info("停复牌 已补到 %s（第 %d/%d 段）", end_text, index, total)
         chunk_start = chunk_end + timedelta(days=1)
 
     return written

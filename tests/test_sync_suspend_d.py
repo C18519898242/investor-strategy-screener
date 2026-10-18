@@ -59,6 +59,22 @@ class SuspendDTest(unittest.TestCase):
         self.assertEqual(len(client.calls), 149)
         self.assertNotIn("suspend_type", client.calls[0])
 
+    def test_every_chunk_reports_progress_on_the_console(self):
+        client = FakeClient()
+
+        with self.assertLogs("screener.sync.suspend_d", level="INFO") as captured:
+            fetch_suspend_d(self.connection, client, today=date(2026, 10, 18))
+
+        self.assertEqual(len(captured.output), 149)
+        self.assertEqual(
+            captured.output[0],
+            "INFO:screener.sync.suspend_d:停复牌 已补到 20151113（第 1/149 段）",
+        )
+        self.assertEqual(
+            captured.output[-1],
+            "INFO:screener.sync.suspend_d:停复牌 已补到 20261018（第 149/149 段）",
+        )
+
     def test_water_level_day_is_deleted_and_chunking_starts_there(self):
         client = FakeClient([row("20211001"), row("20211005")])
         fetch_suspend_d(self.connection, client, today=date(2021, 11, 5))
