@@ -25,7 +25,14 @@ investor-strategy-screener/
 ├── screener/
 │   ├── __init__.py
 │   ├── cli.py              # 菜单
-│   ├── sync.py             # 唯一可以联网的部分
+│   ├── sync/               # 唯一可以联网的部分
+│   │   ├── __init__.py     # 只做再导出，不含逻辑
+│   │   ├── client.py       # 唯一 import tushare、唯一设置代理地址的地方
+│   │   ├── pipeline.py     # 读配置、开批次、记账、发布
+│   │   ├── registry.py     # 数据名 → 抓取函数
+│   │   ├── retry.py        # 代理错误的退避重试
+│   │   ├── stock_basic.py  # 股票列表
+│   │   └── trade_cal.py    # 交易日历
 │   ├── store.py            # SQLite
 │   ├── report.py           # HTML
 │   └── strategies/
@@ -43,7 +50,7 @@ investor-strategy-screener/
 | 模块 | 职责 | 不允许做的事 |
 | --- | --- | --- |
 | `cli` | 主菜单和两个二级菜单 | 不直接调用 Tushare，不计算策略指标 |
-| `sync` | 唯一可以联网的部分；调用已安装的 Tushare，把远程数据同步进 SQLite。命令行菜单仍称“更新本地数据” | 不执行筛选，不生成 HTML |
+| `sync` | 唯一可以联网的部分（联网与代理地址设置都落在 `sync/client.py`）；调用已安装的 Tushare，把远程数据同步进 SQLite。命令行菜单仍称“更新本地数据” | 不执行筛选，不生成 HTML |
 | `store` | 打开 SQLite、建立和升级表结构 | 不认识具体策略公式 |
 | `strategies` | 每集一个策略文件，条件直接写在代码里；第 1 集为 `episode_01_graham.py`。`base.py` 规定每个策略必须登记所需数据、菜单名称和结果展示字段 | 不调用 Tushare，不生成 HTML |
 | `report` | 用标准库生成离线 HTML | 不重新计算指标，不访问远程数据 |
@@ -54,7 +61,7 @@ investor-strategy-screener/
 
 “更新本地数据”读取所有已实现策略登记的数据需求，拉取共用数据和必要的专用数据，全部写入 SQLite。只有整次更新成功，才记录这次成功结束的时间，并使新数据对筛选可见。
 
-更新中途失败时，筛选必须继续看到上一次完整成功的数据。已经写入的部分新数据不能与旧数据混合后被筛选读到。使用数据库事务还是先写入临时库，留到实现时决定，但这个可见性要求不能改变。
+更新中途失败时，整次更新不算成功，成功结束时间不更新，因此筛选看到的仍是上一次完整成功的数据。但表内数据可能残缺——某张表被清空而没来得及写回时，它这次就是空的。这一点被明确接受：不引入数据库事务，也不写临时库，下次更新重跑一遍就覆盖掉。
 
 “运行选股”先做数据完整性检查：确认所选策略和所选日期需要的数据已经完整更新。某一类必需数据缺失或只拉到一半时，命令报错并停止，不生成 HTML。这个检查只判断输入数据是否完整，不对筛选结果做程序化验收。
 
@@ -62,7 +69,7 @@ investor-strategy-screener/
 
 SQLite 保存从 Tushare 取回的原始数据，例如行情、财报、分红和交易日历，同时记录表结构版本和每次完整成功更新的结束时间。程序不提前保存格雷厄姆数或其他策略计算结果。修改代码中的阈值后，使用同一份原始数据重新计算。
 
-原始数据的保存范围已定：**接口返回的字段全部入库**（不裁列），**下载不做行级取舍**（全市场，含已退市股票），**历史起点 11 年**（覆盖后续策略所需的 10 年复合增速并留缓冲）。首次下载覆盖全区间，日常更新只补差集——从库里已保存的范围推出缺什么，不重复全量拉取。原始层只存事实，字段取舍与口径判断都留在筛选计算中。逐条决议与接口实测见 [docs/data-model-proposal.md](../../data-model-proposal.md) 与 [docs/tushare-api-evaluation.md](../../tushare-api-evaluation.md)。
+原始数据的保存范围已定：**接口返回的字段全部入库**（不裁列），**下载不做行级取舍**（全市场，含已退市股票；唯一例外是 `stock_basic` 只取在市股票 `list_status='L'`，2026-10-18），**历史起点 11 年**（覆盖后续策略所需的 10 年复合增速并留缓冲）。首次下载覆盖全区间，日常更新只补差集——从库里已保存的范围推出缺什么，不重复全量拉取（2026-10-18：已落地的 `stock_basic` 与 `trade_cal` 例外，每次更新都整表清空重写，见 [原始层首批接口设计](2026-10-18-raw-layer-stock-basic-trade-cal-design.md)）。原始层只存事实，字段取舍与口径判断都留在筛选计算中。逐条决议与接口实测见 [docs/data-model-proposal.md](../../data-model-proposal.md) 与 [docs/tushare-api-evaluation.md](../../tushare-api-evaluation.md)。
 
 ## 数据层设计
 
@@ -88,6 +95,7 @@ Tushare ──同步（联网）──▶ 原始层（通用，store）──筛
 | `fina_indicator` | `(ts_code, end_date, ann_date, update_flag)` | `end_date` |
 | `dividend` | `(ts_code, end_date, ann_date, div_proc)` | `ann_date` |
 | `stock_basic` | `ts_code` | `list_status` |
+| `trade_cal` | `(exchange, cal_date)` | — |
 | `suspend_d` | `(ts_code, trade_date, suspend_type)` | `trade_date` |
 | `namechange` | `(ts_code, name, start_date)` | — |
 | `index_member_all` | `(ts_code, l1_code, l2_code, l3_code, in_date)` | `ts_code` |
