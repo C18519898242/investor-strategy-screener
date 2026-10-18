@@ -69,13 +69,6 @@ def main(
 
 
 def _sync_menu(connection, strategies, settings, fetch, clock, input_fn, output_fn) -> int:
-    updated = last_successful_sync_at(connection) or "无"
-    output_fn("更新本地数据")
-    output_fn(f"1. 开始更新 ({updated})")
-    output_fn("0. 返回主菜单")
-    choice = input_fn("请选择：")
-    if choice != "1":
-        return 0
     datasets = tuple(
         dict.fromkeys(
             dataset for strategy in strategies for dataset in strategy.spec.required_datasets
@@ -87,6 +80,8 @@ def _sync_menu(connection, strategies, settings, fetch, clock, input_fn, output_
     for index, dataset in enumerate(datasets, start=1):
         output_fn(f"  {index}. {dataset}（{levels[dataset]}）")
     skipped = _ask_skips(input_fn, output_fn, len(datasets))
+    if skipped is None:
+        return 0
     selected = tuple(
         dataset for index, dataset in enumerate(datasets, start=1) if index not in skipped
     )
@@ -113,22 +108,25 @@ def _sync_menu(connection, strategies, settings, fetch, clock, input_fn, output_
     return 0
 
 
-def _ask_skips(input_fn, output_fn, count: int) -> set[int]:
-    """问一次这次不补哪几个数据集；回车＝一个都不跳，编号非法就再问一遍。"""
+def _ask_skips(input_fn, output_fn, count: int) -> set[int] | None:
+    """问一次这次不补哪几个数据集；回车＝一个都不跳，0＝返回主菜单，编号非法就再问一遍。"""
     while True:
-        answer = input_fn("不补哪几个（编号用空格或逗号分隔；直接回车＝全都补）：")
+        answer = input_fn("不补哪几个（编号用空格或逗号分隔；直接回车＝全都补；0＝返回主菜单）：")
         try:
             return _parse_skips(answer, count)
         except ValueError as error:
             output_fn(str(error))
 
 
-def _parse_skips(answer: str, count: int) -> set[int]:
-    """把「2 3」「2,3」「2，3」解析成编号集合；空输入＝空集合。"""
+def _parse_skips(answer: str, count: int) -> set[int] | None:
+    """把「2 3」「2,3」「2，3」解析成编号集合；空输入＝空集合；出现 0＝None（返回主菜单）。"""
+    tokens = answer.replace(",", " ").replace("，", " ").split()
+    if "0" in tokens:
+        return None
     skips = set()
-    for token in answer.replace(",", " ").replace("，", " ").split():
+    for token in tokens:
         if not token.isdigit() or not 1 <= int(token) <= count:
-            raise ValueError(f"编号应为 1~{count} 之间的数字")
+            raise ValueError(f"编号应为 0~{count} 之间的数字")
         skips.add(int(token))
     return skips
 

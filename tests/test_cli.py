@@ -5,7 +5,7 @@ from unittest import mock
 
 import pandas as pd
 
-from screener.cli import main
+from screener.cli import _parse_skips, main
 from screener.config import Settings
 from screener.logging import shutdown_logging
 from screener.store import begin_sync, open_database, published_datasets
@@ -88,41 +88,68 @@ class MenuTest(unittest.TestCase):
         return {dataset: 3 for dataset in datasets}
 
     def test_blank_answer_fetches_every_dataset(self):
-        self._run(["1", "1", ""])
+        self._run(["1", ""])
 
         self.assertIn("直接回车＝全都补", "\n".join(self.prompts))
         self.assertEqual(self.fetched, [("prices", "financials")])
 
     def test_skip_number_leaves_that_dataset_out(self):
-        self._run(["1", "1", "2", ""])
+        self._run(["1", "2", ""])
 
         self.assertEqual(self.fetched, [("prices",)])
 
     def test_skip_accepts_spaces_commas_and_full_width_commas(self):
-        self._run(["1", "1", "2，", ""])
+        self._run(["1", "2，", ""])
 
         self.assertEqual(self.fetched, [("prices",)])
 
     def test_invalid_skip_number_is_asked_again(self):
-        self._run(["1", "1", "9", "1", ""])
+        self._run(["1", "9", "1", ""])
 
         self.assertEqual(self.fetched, [("financials",)])
-        self.assertIn("编号应为 1~2 之间的数字", "\n".join(self.output))
+        self.assertIn("编号应为 0~2 之间的数字", "\n".join(self.output))
 
     def test_skipping_every_dataset_fetches_nothing(self):
-        code = self._run(["1", "1", "1 2"])
+        code = self._run(["1", "1 2"])
 
         self.assertEqual(code, 0)
         self.assertEqual(self.fetched, [])
         self.assertIn("没有要更新的数据集", "\n".join(self.output))
 
     def test_the_checklist_names_every_dataset(self):
-        self._run(["1", "1", ""])
+        self._run(["1", ""])
 
         text = "\n".join(self.output)
         self.assertIn("本次要更新 2 个数据集", text)
         self.assertIn("  1. prices（未登记）", text)
         self.assertIn("  2. financials（未登记）", text)
+
+    def test_the_main_menu_goes_straight_to_the_checklist(self):
+        self._run(["1", ""])
+
+        self.assertEqual(
+            self.prompts,
+            [
+                "请选择：",
+                "不补哪几个（编号用空格或逗号分隔；直接回车＝全都补；0＝返回主菜单）：",
+                "按回车返回主菜单",
+                "请选择：",
+            ],
+        )
+
+    def test_zero_at_the_checklist_returns_to_the_main_menu_without_fetching(self):
+        code = self._run(["1", "0"])
+
+        self.assertEqual(
+            self.prompts[1],
+            "不补哪几个（编号用空格或逗号分隔；直接回车＝全都补；0＝返回主菜单）：",
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(self.fetched, [])
+        self.assertEqual(self.output.count("1. 更新本地数据"), 2)
+
+    def test_zero_wins_over_other_numbers(self):
+        self.assertIsNone(_parse_skips("0 2", 3))
 
     def test_blank_trade_date_reports_missing_calendar(self):
         self._run(["2", "1", ""])
@@ -143,7 +170,7 @@ class MenuTest(unittest.TestCase):
         self.assertFalse((self.root / "outputs").exists())
 
     def test_successful_sync_shows_time_without_token(self):
-        code = self._run(["1", "1", ""])
+        code = self._run(["1", ""])
 
         self.assertEqual(code, 0)
         text = "\n".join(self.output)
@@ -151,7 +178,7 @@ class MenuTest(unittest.TestCase):
         self.assertNotIn("SECRET-TOKEN-VALUE", text)
 
     def test_one_run_reports_every_missing_config_name(self):
-        code = self._run(["1", "1", ""], config=settings(tushare_token="", tushare_api_url=""))
+        code = self._run(["1", ""], config=settings(tushare_token="", tushare_api_url=""))
 
         self.assertEqual(code, 1)
         text = "\n".join(self.output)
@@ -159,7 +186,7 @@ class MenuTest(unittest.TestCase):
         self.assertEqual(self.fetch_calls, 0)
 
     def test_one_run_reports_the_single_missing_name(self):
-        code = self._run(["1", "1", ""], config=settings(tushare_api_url=""))
+        code = self._run(["1", ""], config=settings(tushare_api_url=""))
 
         self.assertEqual(code, 1)
         text = "\n".join(self.output)
@@ -167,7 +194,7 @@ class MenuTest(unittest.TestCase):
         self.assertNotIn("TUSHARE_TOKEN", text)
 
     def test_update_uses_the_real_fetcher_by_default(self):
-        values = iter(["1", "1", ""])
+        values = iter(["1", ""])
 
         def answer(prompt=""):
             try:
@@ -200,7 +227,7 @@ class MenuTest(unittest.TestCase):
         self.assertNotIn("SECRET-TOKEN-VALUE", "\n".join(self.output))
 
     def test_log_file_never_contains_the_token(self):
-        self._run(["1", "1", ""])
+        self._run(["1", ""])
 
         text = self.log_file.read_text(encoding="utf-8")
 
@@ -209,6 +236,6 @@ class MenuTest(unittest.TestCase):
         self.assertNotIn("SECRET-TOKEN-VALUE", text)
 
     def test_sync_logs_the_dataset_names(self):
-        self._run(["1", "1", ""])
+        self._run(["1", ""])
 
         self.assertIn("更新范围：prices、financials", "\n".join(self.output))
