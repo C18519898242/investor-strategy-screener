@@ -34,3 +34,22 @@ class RegistryTest(unittest.TestCase):
 
         self.assertEqual(counts, {"股票列表": 1, "交易日历": 1})
         self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM trade_cal").fetchone(), (1,))
+
+    def test_logs_progress_for_every_dataset(self):
+        with self.assertLogs("screener.sync.registry", level="INFO") as captured:
+            fetch_datasets(self.connection, ("股票列表", "交易日历"), fake_client())
+
+        self.assertEqual(
+            captured.output,
+            [
+                "INFO:screener.sync.registry:开始拉取 股票列表",
+                "INFO:screener.sync.registry:股票列表 完成：1 行",
+                "INFO:screener.sync.registry:开始拉取 交易日历",
+                "INFO:screener.sync.registry:交易日历 完成：1 行",
+            ],
+        )
+
+    def test_unknown_dataset_logs_nothing_before_raising(self):
+        with self.assertNoLogs("screener.sync.registry", level="INFO"):
+            with self.assertRaisesRegex(SyncError, "未登记的数据名：不存在的数据"):
+                fetch_datasets(self.connection, ("不存在的数据",), fake_client())

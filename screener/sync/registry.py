@@ -1,3 +1,4 @@
+import logging
 import sqlite3
 from collections.abc import Callable, Mapping
 
@@ -6,6 +7,8 @@ from screener.sync.stock_basic import DATASET as STOCK_BASIC_DATASET
 from screener.sync.stock_basic import fetch_stock_basic
 from screener.sync.trade_cal import DATASET as TRADE_CAL_DATASET
 from screener.sync.trade_cal import fetch_trade_cal
+
+logger = logging.getLogger(__name__)
 
 DATASET_FETCHERS: dict[str, Callable[[sqlite3.Connection, object], int]] = {
     STOCK_BASIC_DATASET: fetch_stock_basic,
@@ -22,5 +25,7 @@ def fetch_datasets(
         fetcher = DATASET_FETCHERS.get(dataset)
         if fetcher is None:
             raise SyncError(f"未登记的数据名：{dataset}")
+        logger.info("开始拉取 %s", dataset)
         counts[dataset] = fetcher(connection, client)
+        logger.info("%s 完成：%d 行", dataset, counts[dataset])
     return counts
