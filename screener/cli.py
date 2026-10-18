@@ -69,66 +69,37 @@ def main(
 
 
 def _sync_menu(connection, strategies, settings, fetch, clock, input_fn, output_fn) -> int:
+    """列出数据集和各自水位，选一个就只拉那一个；拉完回到这张菜单，0 回主菜单。"""
     datasets = tuple(
         dict.fromkeys(
             dataset for strategy in strategies for dataset in strategy.spec.required_datasets
         )
     )
-    logger.info("更新范围：%s", "、".join(datasets))
-    levels = dataset_water_levels(connection, datasets)
-    output_fn(f"本次要更新 {len(datasets)} 个数据集：")
-    for index, dataset in enumerate(datasets, start=1):
-        output_fn(f"  {index}. {dataset}（{levels[dataset]}）")
-    skipped = _ask_skips(input_fn, output_fn, len(datasets))
-    if skipped is None:
-        return 0
-    selected = tuple(
-        dataset for index, dataset in enumerate(datasets, start=1) if index not in skipped
-    )
-    if not selected:
-        output_fn("没有要更新的数据集")
-        return 0
-    if skipped:
-        skipped_names = [
-            dataset for index, dataset in enumerate(datasets, start=1) if index in skipped
-        ]
-        logger.info("本次跳过：%s", "、".join(skipped_names))
-    try:
-        sync_all(
-            connection,
-            datasets=selected,
-            settings=settings,
-            fetch=fetch,
-            clock=clock,
-        )
-    except Exception as error:
-        logger.error("更新失败：%s", error, exc_info=True)
-        return 1
-    input_fn("按回车返回主菜单")
-    return 0
-
-
-def _ask_skips(input_fn, output_fn, count: int) -> set[int] | None:
-    """问一次这次不补哪几个数据集；回车＝一个都不跳，0＝返回主菜单，编号非法就再问一遍。"""
     while True:
-        answer = input_fn("不补哪几个（编号用空格或逗号分隔；直接回车＝全都补；0＝返回主菜单）：")
+        levels = dataset_water_levels(connection, datasets)
+        output_fn("更新本地数据")
+        for index, dataset in enumerate(datasets, start=1):
+            output_fn(f"{index}. {dataset}（{levels[dataset]}）")
+        output_fn("0. 返回主菜单")
+        choice = input_fn("请选择：")
+        if choice == "0":
+            return 0
+        if not choice.isdigit() or not 1 <= int(choice) <= len(datasets):
+            output_fn(f"编号应为 0~{len(datasets)} 之间的数字")
+            continue
+        dataset = datasets[int(choice) - 1]
         try:
-            return _parse_skips(answer, count)
-        except ValueError as error:
-            output_fn(str(error))
-
-
-def _parse_skips(answer: str, count: int) -> set[int] | None:
-    """把「2 3」「2,3」「2，3」解析成编号集合；空输入＝空集合；出现 0＝None（返回主菜单）。"""
-    tokens = answer.replace(",", " ").replace("，", " ").split()
-    if "0" in tokens:
-        return None
-    skips = set()
-    for token in tokens:
-        if not token.isdigit() or not 1 <= int(token) <= count:
-            raise ValueError(f"编号应为 0~{count} 之间的数字")
-        skips.add(int(token))
-    return skips
+            sync_all(
+                connection,
+                datasets=(dataset,),
+                settings=settings,
+                fetch=fetch,
+                clock=clock,
+            )
+        except Exception as error:
+            logger.error("更新失败：%s", error, exc_info=True)
+            return 1
+        input_fn("按回车继续")
 
 
 def _screen_menu(connection, strategies, output_root, input_fn, output_fn) -> int:

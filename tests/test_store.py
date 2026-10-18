@@ -38,3 +38,16 @@ class StoreVisibilityTest(unittest.TestCase):
 
         self.assertEqual(last_successful_sync_at(connection), "2026-10-11 09:00:00")
         self.assertEqual(published_datasets(connection), frozenset({"prices"}))
+
+    def test_datasets_from_earlier_published_batches_stay_ready(self):
+        connection = open_database(self.path)
+        first = begin_sync(connection)
+        first.record("prices", 2)
+        first.publish("2026-10-11 09:00:00")
+
+        second = begin_sync(connection)
+        second.record("financials", 4)
+        second.publish("2026-10-12 09:00:00")
+
+        self.assertEqual(last_successful_sync_at(connection), "2026-10-12 09:00:00")
+        self.assertEqual(published_datasets(connection), frozenset({"prices", "financials"}))

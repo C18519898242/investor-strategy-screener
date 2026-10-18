@@ -169,12 +169,19 @@ def last_successful_sync_at(connection: sqlite3.Connection) -> str | None:
 
 
 def published_datasets(connection: sqlite3.Connection) -> frozenset[str]:
-    batch_id = _latest_published_id(connection)
-    if batch_id is None:
-        return frozenset()
+    """所有成功批次里出现过的数据集。
+
+    每次更新可以只拉一个数据集，所以「就绪」是跨批次的并集：某个数据集只要在任意
+    一次成功更新里出现过就算就绪。只看最新批次会让增量更新后的筛股误报「本地数据
+    不完整」。
+    """
     rows = connection.execute(
-        "SELECT dataset FROM sync_dataset WHERE batch_id = ?",
-        (batch_id,),
+        """
+        SELECT DISTINCT sync_dataset.dataset
+        FROM sync_dataset
+        JOIN sync_batch ON sync_batch.batch_id = sync_dataset.batch_id
+        WHERE sync_batch.state = 'published'
+        """
     ).fetchall()
     return frozenset(row[0] for row in rows)
 
