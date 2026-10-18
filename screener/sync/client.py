@@ -1,5 +1,9 @@
+import logging
+
 from screener.config import Settings
 from screener.sync.errors import SyncError
+
+logger = logging.getLogger(__name__)
 
 
 def read_tushare_config(settings: Settings) -> tuple[str, str]:
@@ -22,4 +26,5 @@ def create_tushare_client(settings: Settings) -> object:
     token, api_url = read_tushare_config(settings)
     client = ts.pro_api(token, timeout=120)
     client._DataApi__http_url = api_url
+    logger.debug("客户端就绪：timeout=120 秒，地址 %s", api_url)
     return client

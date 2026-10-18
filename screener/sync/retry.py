@@ -1,7 +1,10 @@
+import logging
 import time
 from collections.abc import Callable
 
 from screener.sync.errors import SyncError
+
+logger = logging.getLogger(__name__)
 
 RETRYABLE_MARKERS: tuple[str, ...] = (
     "rate_limited",
@@ -22,15 +25,22 @@ def call_with_retry[T](
     """代理错误按固定退避重试；认不出的异常原样抛出，不重试。"""
     for attempt in range(attempts):
         try:
-            return operation()
+            result = operation()
         except Exception as error:
             message = str(error).lower()
-            if not any(marker in message for marker in RETRYABLE_MARKERS):
+            marker = next((name for name in RETRYABLE_MARKERS if name in message), None)
+            if marker is None:
                 raise
             if attempt == attempts - 1:
                 raise SyncError(f"重试 {attempts} 次后仍失败：{error}") from error
-            if "rate_limited" in message:
-                sleep(RATE_LIMITED_WAIT)
+            if marker == "rate_limited":
+                wait = RATE_LIMITED_WAIT
             else:
-                sleep(BACKOFF_WAITS[min(attempt, len(BACKOFF_WAITS) - 1)])
+                wait = BACKOFF_WAITS[min(attempt, len(BACKOFF_WAITS) - 1)]
+            logger.warning("第 %d 次调用失败（%s），%d 秒后重试", attempt + 1, marker, wait)
+            sleep(wait)
+        else:
+            if attempt > 0:
+                logger.debug("第 %d 次尝试成功", attempt + 1)
+            return result
     raise AssertionError("attempts 必须大于 0")
