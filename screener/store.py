@@ -1,4 +1,5 @@
 import sqlite3
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 
@@ -49,8 +50,61 @@ def open_database(path: Path) -> sqlite3.Connection:
         )
         """
     )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS stock_basic (
+            ts_code TEXT PRIMARY KEY,
+            symbol TEXT,
+            name TEXT,
+            area TEXT,
+            industry TEXT,
+            fullname TEXT,
+            enname TEXT,
+            cnspell TEXT,
+            market TEXT,
+            exchange TEXT,
+            curr_type TEXT,
+            list_status TEXT,
+            list_date TEXT,
+            delist_date TEXT,
+            is_hs TEXT
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS stock_basic_list_status ON stock_basic (list_status)"
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS trade_cal (
+            exchange TEXT NOT NULL,
+            cal_date TEXT NOT NULL,
+            is_open INTEGER,
+            pretrade_date TEXT,
+            PRIMARY KEY (exchange, cal_date)
+        )
+        """
+    )
     connection.commit()
     return connection
+
+
+def replace_rows(
+    connection: sqlite3.Connection,
+    *,
+    table: str,
+    columns: tuple[str, ...],
+    rows: Iterable[Sequence[object]],
+) -> int:
+    """清空整张表再批量插入；不提交，提交点仍由同步批次决定。"""
+    materialized = list(rows)
+    connection.execute(f"DELETE FROM {table}")
+    placeholders = ", ".join("?" * len(columns))
+    connection.executemany(
+        f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders})",
+        materialized,
+    )
+    return len(materialized)
 
 
 def _latest_published_id(connection: sqlite3.Connection) -> int | None:
