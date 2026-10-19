@@ -108,7 +108,7 @@ DELETE FROM daily_basic WHERE trade_date = ?;   -- ? = 水位那一天
 
 **回补窗口 1 天**：只删水位那一天。D8 已改成「回补窗口由各数据集各自决定」，本数据集定为 1 天，加上按日历补齐缺失日。
 
-**重试**：沿用既有规则（3 次尝试；`rate_limited` 等 30 秒；`upstream_pool_exhausted`、连接重置、读超时退避 5/15 秒；3 次都失败抛 `SyncError`，整批失败；等待函数可注入，测试里不许真等）。`daily_basic` 实测触发过一次 `upstream_pool_exhausted`（提示等 30 秒后重试）。
+**重试**：沿用既有规则（临时故障不限次数一直重试；`rate_limited` 等 30 秒；`upstream_pool_exhausted`、连接重置、读超时固定等 5 秒；认不出的异常立即抛；等待函数可注入，测试里不许真等。2026-10-19 改，原为最多 3 次尝试、5/15 秒退避）。`daily_basic` 实测触发过多次 `upstream_pool_exhausted`（提示等 30 秒后重试）——真实回填就在第 9 个交易日被它打断，这条改动正是为此。
 
 ## 5. 失败语义
 

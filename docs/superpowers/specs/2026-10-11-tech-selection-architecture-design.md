@@ -30,7 +30,7 @@ investor-strategy-screener/
 │   │   ├── client.py       # 唯一 import tushare、唯一设置代理地址的地方
 │   │   ├── pipeline.py     # 读配置、开批次、记账、发布
 │   │   ├── registry.py     # 数据名 → 抓取函数
-│   │   ├── retry.py        # 代理错误的退避重试
+│   │   ├── retry.py        # 代理错误的固定间隔重试（临时故障不限次数）
 │   │   ├── stock_basic.py  # 股票列表
 │   │   └── trade_cal.py    # 交易日历
 │   ├── store.py            # SQLite

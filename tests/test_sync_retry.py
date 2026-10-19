@@ -25,18 +25,18 @@ class CallWithRetryTest(unittest.TestCase):
         self.assertEqual(waits, [30, 30])
         self.assertEqual(len(attempts), 3)
 
-    def test_upstream_failure_waits_five_then_fifteen(self):
+    def test_upstream_failure_waits_five_seconds_each_time(self):
         waits, attempts = [], []
 
         def operation():
             attempts.append(1)
-            if len(attempts) < 3:
+            if len(attempts) < 4:
                 raise Exception("[upstream_pool_exhausted] 数据当前不可用")
             return "ok"
 
         call_with_retry(operation, sleep=waits.append)
 
-        self.assertEqual(waits, [5, 15])
+        self.assertEqual(waits, [5, 5, 5])
 
     def test_read_timeout_is_retried_like_an_upstream_failure(self):
         waits, attempts = [], []
@@ -51,12 +51,18 @@ class CallWithRetryTest(unittest.TestCase):
 
         self.assertEqual(waits, [5])
 
-    def test_gives_up_after_three_attempts(self):
-        def operation():
-            raise Exception("[upstream_pool_exhausted] 数据当前不可用")
+    def test_keeps_retrying_a_transient_error_past_three_attempts(self):
+        """没有次数上限：一次上游抖动不该让十几个小时的回填整轮作废。"""
+        attempts = []
 
-        with self.assertRaisesRegex(SyncError, "重试 3 次后仍失败"):
-            call_with_retry(operation, sleep=lambda seconds: None)
+        def operation():
+            attempts.append(1)
+            if len(attempts) < 6:
+                raise Exception("[upstream_pool_exhausted] 数据当前不可用")
+            return "ok"
+
+        self.assertEqual(call_with_retry(operation, sleep=lambda seconds: None), "ok")
+        self.assertEqual(len(attempts), 6)
 
     def test_does_not_retry_an_unknown_error(self):
         waits = []
