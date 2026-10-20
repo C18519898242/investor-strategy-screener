@@ -34,6 +34,8 @@
 ```text
 product.md                        产品需求与待讨论的产品形态
 strategies.md                     九集策略规则与共用数据源映射
+scripts/
+  backup_db.py                    数据库一致性备份
 sources/
   data-source-evaluation.md       第 1 集的数据源复核
   episode-01-graham/              格雷厄姆视频核对资料
@@ -72,6 +74,33 @@ TUSHARE_API_URL=https://tl.kaixin8.top/tushare/sdk
 ```
 
 改动依赖后：编辑 `pyproject.toml`，执行 `uv lock` 更新锁文件，并把 `uv.lock` 一并提交。
+
+## 数据库备份
+
+本地数据库 `data/screener.sqlite3` 用 WAL 模式。直接复制 `data/` 下的文件时，如果库正被写入，主文件与 `-wal` 可能不是同一时刻的状态：轻则丢掉最近的写入，重则备份打不开，而且事后才看得出来。
+
+`scripts/backup_db.py` 用 SQLite 的 `VACUUM INTO` 生成一致性快照，产出独立的单文件备份，默认放在 `data/backup/`。文件名带时间戳，不会覆盖旧备份：
+
+```bash
+uv run --locked python scripts/backup_db.py                          # 备份到 data/backup/
+uv run --locked python scripts/backup_db.py --keep 3                 # 备份后只保留最近 3 个
+uv run --locked python scripts/backup_db.py --output D:\backup       # 放到别的目录（仍带时间戳）
+uv run --locked python scripts/backup_db.py --output D:\backup\a.sqlite3   # 用指定文件名
+```
+
+`--output` 给目录就生成带时间戳的文件，并在该目录里执行 `--keep` 轮换；给具体文件名就用那个名字，不参与轮换（免得你的文件被当旧备份删掉）。目标已存在时脚本拒绝覆盖，也拒绝把备份写回数据库本身。
+
+备份完成后，脚本会打开备份文件跑一次 `PRAGMA integrity_check` 并打印各表行数；校验不通过时直接退出，不会删除任何旧备份。
+
+`integrity_check` 查的是**文件结构**：每页归属是否清楚、有没有被两个对象共用、B-tree 的页指针和单元格偏移是否在页内、索引条目是否都指向真实存在的行、空闲页链表是否自洽、记录头与字段类型编码是否合法。它**不查**业务内容——数值对不对、有没有缺行、是否与上游一致，它一概不管；那些要靠抓取时和接口逐字段比对。
+
+`data/` 下三个文件各自的用途：
+
+| 文件 | 作用 | 备份时 |
+| --- | --- | --- |
+| `screener.sqlite3` | 全部数据 | 必须 |
+| `screener.sqlite3-wal` | 尚未合并的写入 | 为 0 字节时不需要；非 0 时必须与主文件一起复制 |
+| `screener.sqlite3-shm` | 共享内存索引 | 永远不需要，SQLite 会自动重建 |
 
 ## 项目约束
 
