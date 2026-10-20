@@ -36,6 +36,7 @@ product.md                        产品需求与待讨论的产品形态
 strategies.md                     九集策略规则与共用数据源映射
 scripts/
   backup_db.py                    数据库一致性备份
+  income_backfill.py              利润表全历史初始化
 sources/
   data-source-evaluation.md       第 1 集的数据源复核
   episode-01-graham/              格雷厄姆视频核对资料
@@ -101,6 +102,22 @@ uv run --locked python scripts/backup_db.py --output D:\backup\a.sqlite3   # 用
 | `screener.sqlite3` | 全部数据 | 必须 |
 | `screener.sqlite3-wal` | 尚未合并的写入 | 为 0 字节时不需要；非 0 时必须与主文件一起复制 |
 | `screener.sqlite3-shm` | 共享内存索引 | 永远不需要，SQLite 会自动重建 |
+
+## 利润表全历史初始化
+
+菜单里的「利润表」只做增量：每次补**最近一个已过法定披露截止日**的报告期（4/30 补一季报和上年年报，8/31 补中报，10/31 补三季报），其余时间点运行不会发起请求。
+
+首次建库、或数据库重建后要灌入全部历史，用 `scripts/income_backfill.py`。它逐股一次拉取全部历史（不做 1 年区间切分），4 并发，约半小时跑完 5,577 只：
+
+```bash
+uv run --locked python scripts/income_backfill.py              # 全量
+uv run --locked python scripts/income_backfill.py --limit 20   # 只看前 20 只试跑
+uv run --locked python scripts/income_backfill.py --restart    # 清空 income 表后重来
+```
+
+只存单季口径 `report_type=2`，累计口径不存：策略都按季度计算，两种口径并存会让下游每次先判断用哪一种。
+
+进度记录在 `data/income-backfill-done.txt`，Ctrl+C 中断后重跑会跳过已完成的部分。写入用 upsert（五列主键），重复执行不会产生重复行。**清空过表却留着进度文件，那些股票会被当成已完成而永久缺数据——要重灌必须带 `--restart`。**
 
 ## 项目约束
 

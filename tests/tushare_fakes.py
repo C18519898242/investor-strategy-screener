@@ -11,6 +11,7 @@
 import pandas as pd
 
 from screener.sync.daily_basic import COLUMNS as DAILY_BASIC_COLUMNS
+from screener.sync.income import COLUMNS as INCOME_COLUMNS
 from screener.sync.stock_basic import COLUMNS as STOCK_BASIC_COLUMNS
 
 STOCK_BASIC_FIELD_LIMIT = 13
@@ -31,6 +32,11 @@ def daily_basic_row(**overrides):
     }
 
 
+def income_row(**overrides):
+    """一行 income 的 94 列，默认全是 None。"""
+    return {**dict.fromkeys(INCOME_COLUMNS, None), **overrides}
+
+
 class FakeTushareClient:
     """按 `fields` 裁剪列的假客户端，不联网。"""
 
@@ -41,11 +47,13 @@ class FakeTushareClient:
         trade_cal_rows=(),
         suspend_d_rows=(),
         daily_basic_rows=(),
+        income_rows=(),
     ):
         self.stock_basic_rows = list(stock_basic_rows)
         self.trade_cal_rows = list(trade_cal_rows)
         self.suspend_d_rows = list(suspend_d_rows)
         self.daily_basic_rows = list(daily_basic_rows)
+        self.income_rows = list(income_rows)
         self.calls = []
 
     def stock_basic(self, **params):
@@ -69,6 +77,18 @@ class FakeTushareClient:
     def daily_basic(self, **params):
         fields = self._record("daily_basic", params)
         picked = [row for row in self.daily_basic_rows if row["trade_date"] == params["trade_date"]]
+        return self._slice(picked, fields)
+
+    def income(self, **params):
+        """按 ts_code + period + report_type 取，照真实代理：一次只给一个报告期的一种口径。"""
+        fields = self._record("income", params)
+        picked = [
+            row
+            for row in self.income_rows
+            if row["ts_code"] == params["ts_code"]
+            and row["end_date"] == params["period"]
+            and row["report_type"] == params["report_type"]
+        ]
         return self._slice(picked, fields)
 
     def _record(self, api_name, params):

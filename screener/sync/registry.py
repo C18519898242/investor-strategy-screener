@@ -5,6 +5,8 @@ from collections.abc import Callable, Mapping
 from screener.sync.daily_basic import DATASET as DAILY_BASIC_DATASET
 from screener.sync.daily_basic import fetch_daily_basic
 from screener.sync.errors import SyncError
+from screener.sync.income import DATASET as INCOME_DATASET
+from screener.sync.income import fetch_income
 from screener.sync.stock_basic import DATASET as STOCK_BASIC_DATASET
 from screener.sync.stock_basic import fetch_stock_basic
 from screener.sync.suspend_d import DATASET as SUSPEND_D_DATASET
@@ -19,6 +21,7 @@ DATASET_FETCHERS: dict[str, Callable[[sqlite3.Connection, object], int]] = {
     TRADE_CAL_DATASET: fetch_trade_cal,
     SUSPEND_D_DATASET: fetch_suspend_d,
     DAILY_BASIC_DATASET: fetch_daily_basic,
+    INCOME_DATASET: fetch_income,
 }
 
 # 每个数据集的水位查询；整表替换的数据集写 None。键必须与 DATASET_FETCHERS 一致。
@@ -27,6 +30,7 @@ WATER_QUERIES: dict[str, str | None] = {
     TRADE_CAL_DATASET: "SELECT MAX(cal_date) FROM trade_cal",
     SUSPEND_D_DATASET: "SELECT MAX(trade_date) FROM suspend_d",
     DAILY_BASIC_DATASET: "SELECT MAX(trade_date) FROM daily_basic",
+    INCOME_DATASET: "SELECT MAX(end_date) FROM income WHERE report_type = '2'",
 }
 
 

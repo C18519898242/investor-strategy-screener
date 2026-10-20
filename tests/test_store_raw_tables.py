@@ -264,3 +264,56 @@ class RawTablesTest(unittest.TestCase):
         ]
 
         self.assertIn("daily_basic_trade_date", names)
+
+    def test_income_table_matches_the_columns_the_sync_module_writes(self):
+        """建表语句和 `screener.sync.income.COLUMNS` 都是手写的，顺序错了会错列落库。"""
+        from screener.sync.income import COLUMNS as INCOME_COLUMNS
+
+        self.assertEqual([name for name, _ in self._columns("income")], list(INCOME_COLUMNS))
+
+    def test_income_primary_key_covers_the_whole_revision_identity(self):
+        primary = sorted((pk, name) for name, pk in self._columns("income") if pk)
+
+        self.assertEqual(
+            [name for _, name in primary],
+            ["ts_code", "end_date", "report_type", "ann_date", "update_flag"],
+        )
+
+    def test_income_has_an_end_date_index(self):
+        names = [
+            row[0]
+            for row in self.connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'income'"
+            )
+        ]
+
+        self.assertIn("idx_income_end_date", names)
+
+    def test_income_rejects_the_same_revision_twice(self):
+        columns = ("ts_code", "ann_date", "end_date", "report_type", "update_flag")
+        row = ("000001.SZ", "20261020", "20260930", "2", "0")
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            insert_rows(
+                self.connection,
+                table="income",
+                columns=columns,
+                rows=[row, row],
+            )
+
+    def test_income_keeps_two_revisions_of_the_same_period(self):
+        columns = ("ts_code", "ann_date", "end_date", "report_type", "update_flag")
+        insert_rows(
+            self.connection,
+            table="income",
+            columns=columns,
+            rows=[
+                ("000001.SZ", "20261020", "20260930", "2", "0"),
+                ("000001.SZ", "20261025", "20260930", "2", "1"),
+            ],
+        )
+
+        self.assertEqual(
+            self.connection.execute("SELECT COUNT(*) FROM income").fetchone(),
+            (2,),
+        )
