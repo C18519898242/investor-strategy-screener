@@ -12,6 +12,7 @@ import pandas as pd
 
 from screener.sync.balancesheet import COLUMNS as BALANCESHEET_COLUMNS
 from screener.sync.daily_basic import COLUMNS as DAILY_BASIC_COLUMNS
+from screener.sync.fina_indicator import COLUMNS as FINA_INDICATOR_COLUMNS
 from screener.sync.income import COLUMNS as INCOME_COLUMNS
 from screener.sync.stock_basic import COLUMNS as STOCK_BASIC_COLUMNS
 
@@ -43,6 +44,11 @@ def balancesheet_row(**overrides):
     return {**dict.fromkeys(BALANCESHEET_COLUMNS, None), **overrides}
 
 
+def fina_indicator_row(**overrides):
+    """一行 fina_indicator 的 109 列，默认全是 None。"""
+    return {**dict.fromkeys(FINA_INDICATOR_COLUMNS, None), **overrides}
+
+
 class FakeTushareClient:
     """按 `fields` 裁剪列的假客户端，不联网。"""
 
@@ -55,6 +61,7 @@ class FakeTushareClient:
         daily_basic_rows=(),
         income_rows=(),
         balancesheet_rows=(),
+        fina_indicator_rows=(),
     ):
         self.stock_basic_rows = list(stock_basic_rows)
         self.trade_cal_rows = list(trade_cal_rows)
@@ -62,6 +69,7 @@ class FakeTushareClient:
         self.daily_basic_rows = list(daily_basic_rows)
         self.income_rows = list(income_rows)
         self.balancesheet_rows = list(balancesheet_rows)
+        self.fina_indicator_rows = list(fina_indicator_rows)
         self.calls = []
 
     def stock_basic(self, **params):
@@ -108,6 +116,16 @@ class FakeTushareClient:
             if row["ts_code"] == params["ts_code"]
             and row["end_date"] == params["period"]
             and row["report_type"] == params["report_type"]
+        ]
+        return self._slice(picked, fields)
+
+    def fina_indicator(self, **params):
+        """按 ts_code + period 取，照真实代理：没有 report_type，一期可能多行（修订版本）。"""
+        fields = self._record("fina_indicator", params)
+        picked = [
+            row
+            for row in self.fina_indicator_rows
+            if row["ts_code"] == params["ts_code"] and row["end_date"] == params["period"]
         ]
         return self._slice(picked, fields)
 

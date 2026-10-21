@@ -5,6 +5,7 @@ from datetime import date
 from screener.store import insert_rows
 from screener.sync.report_periods import target_periods
 from screener.sync.retry import call_with_retry
+from screener.sync.versions import keep_latest as _keep_latest
 
 logger = logging.getLogger(__name__)
 
@@ -183,25 +184,11 @@ KEY: tuple[str, ...] = ("ts_code", "end_date", "report_type")
 VERSION_COLUMNS: tuple[str, ...] = ("f_ann_date", "ann_date", "update_flag")
 
 _INDEX = {name: position for position, name in enumerate(COLUMNS)}
-_KEY_POSITIONS = tuple(_INDEX[name] for name in KEY)
-_VERSION_POSITIONS = tuple(_INDEX[name] for name in VERSION_COLUMNS)
 
 
 def keep_latest(rows: list[tuple]) -> list[tuple]:
-    """同一`KEY`只留一行，取 `VERSION_COLUMNS` 最大的那条。
-
-    三者完全相同还出现两行时（实测没有，但上游没保证），取响应里靠后的一条，
-    和 income 的 `drop_duplicates(keep="last")` 保持一致。
-    """
-    best: dict[tuple, tuple[str, ...]] = {}
-    kept: dict[tuple, tuple] = {}
-    for row in rows:
-        key = tuple(row[position] for position in _KEY_POSITIONS)
-        version = tuple(str(row[position] or "") for position in _VERSION_POSITIONS)
-        if key not in best or version >= best[key]:
-            best[key] = version
-            kept[key] = row
-    return list(kept.values())
+    """同一`KEY`只留一行，取 `VERSION_COLUMNS` 最大的那条。"""
+    return _keep_latest(rows, columns=COLUMNS, key=KEY, version=VERSION_COLUMNS)
 
 
 def _codes_missing(connection: sqlite3.Connection, period: str) -> list[str]:

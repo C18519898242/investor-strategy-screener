@@ -356,3 +356,41 @@ class RawTablesTest(unittest.TestCase):
                 columns=columns,
                 rows=[row, row],
             )
+
+    def test_fina_indicator_table_matches_the_columns_the_sync_module_writes(self):
+        """建表语句和 `screener.sync.fina_indicator.COLUMNS` 都是手写的，顺序错了会错列落库。"""
+        from screener.sync.fina_indicator import COLUMNS as FINA_INDICATOR_COLUMNS
+
+        self.assertEqual(
+            [name for name, _ in self._columns("fina_indicator")],
+            list(FINA_INDICATOR_COLUMNS),
+        )
+
+    def test_fina_indicator_primary_key_is_one_row_per_quarter(self):
+        """该接口没有 report_type，同一报告期的修订版本已在上游侧压成一行。"""
+        primary = sorted((pk, name) for name, pk in self._columns("fina_indicator") if pk)
+
+        self.assertEqual([name for _, name in primary], ["ts_code", "end_date"])
+
+    def test_fina_indicator_has_an_end_date_index(self):
+        names = [
+            row[0]
+            for row in self.connection.execute(
+                "SELECT name FROM sqlite_master"
+                " WHERE type = 'index' AND tbl_name = 'fina_indicator'"
+            )
+        ]
+
+        self.assertIn("idx_fina_indicator_end_date", names)
+
+    def test_fina_indicator_rejects_a_second_row_for_the_same_quarter(self):
+        columns = ("ts_code", "end_date")
+        row = ("000001.SZ", "20260930")
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            insert_rows(
+                self.connection,
+                table="fina_indicator",
+                columns=columns,
+                rows=[row, row],
+            )
