@@ -38,6 +38,7 @@ scripts/
   backup_db.py                    数据库一致性备份
   income_backfill.py              利润表全历史初始化
   balancesheet_backfill.py        资产负债表全历史初始化
+  fina_indicator_backfill.py      财务指标全历史初始化
 sources/
   data-source-evaluation.md       第 1 集的数据源复核
   episode-01-graham/              格雷厄姆视频核对资料
@@ -137,6 +138,24 @@ uv run --locked python scripts/balancesheet_backfill.py --restart    # 清空 ba
 `report_type` 恒为 `1`（合并报表），上游没有单季或母公司版本。157 个字段全存，列名与 Tushare 同名。
 
 进度记录在 `data/balancesheet-backfill-done.txt`。20 并发会频繁撞代理限频（约 200 次/分钟），脚本对 429 等 30 秒重试；嫌吵就调小 `--workers`。**同样地，清空过表却留着进度文件，要重灌必须带 `--restart`。**
+
+## 财务指标全历史初始化
+
+菜单里的「财务指标」同样只做增量，规则与利润表一致：每次补最近一个已过法定披露截止日的报告期（4/30 补一季报和上年年报，8/31 补中报，10/31 补三季报），其余时间点运行不会发起请求。
+
+首次建库用 `scripts/fina_indicator_backfill.py`。同样是 100 行上限 + `offset` 翻页，但多数股票历史不足 100 期，一只只要 1 次调用，默认 20 并发，实测 5,577 只耗时 2 小时、写入 325,367 行：
+
+```bash
+uv run --locked python scripts/fina_indicator_backfill.py              # 全量
+uv run --locked python scripts/fina_indicator_backfill.py --limit 20   # 只看前 20 只试跑
+uv run --locked python scripts/fina_indicator_backfill.py --restart    # 清空 fina_indicator 表后重来
+```
+
+**一个季度只存一行。** 该接口没有 `report_type`，但同一报告期会返回修订版本（实测 2024 年报全市场 6,584 只里有 944 组多行，全部是 `update_flag` 0/1 成对），入库前按 `(ann_date, update_flag)` 取最新一条，主键是 `(ts_code, end_date)`。
+
+**`fields` 必须显式列全 109 列**：逐股路径不传 `fields` 时只返回 108 列、**缺 `update_flag`**，省掉就等于丢掉版本信息。`start_date`/`end_date` 在该接口是**报告期**语义，与利润表、资产负债表的公告日语义不同。
+
+进度记录在 `data/fina-indicator-backfill-done.txt`。**同样地，清空过表却留着进度文件，要重灌必须带 `--restart`。**
 
 ## 项目约束
 

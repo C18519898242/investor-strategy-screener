@@ -98,6 +98,7 @@ class MenuTest(unittest.TestCase):
         self.assertIn("4. 每日指标（无数据，首次全量）", text)
         self.assertIn("5. 利润表（无数据，首次全量）", text)
         self.assertIn("6. 资产负债表（无数据，首次全量）", text)
+        self.assertIn("7. 财务指标（无数据，首次全量）", text)
         self.assertIn("0. 返回主菜单", text)
         self.assertNotIn("prices", text)
 
@@ -121,6 +122,11 @@ class MenuTest(unittest.TestCase):
 
         self.assertEqual(self.fetched, [("资产负债表",)])
 
+    def test_the_seventh_entry_maps_to_the_fina_indicator_dataset(self):
+        self._run(["1", "7", "", "0"])
+
+        self.assertEqual(self.fetched, [("财务指标",)])
+
     def test_picking_two_datasets_fetches_each_one(self):
         self._run(["1", "1", "", "2", "", "0"])
 
@@ -135,7 +141,7 @@ class MenuTest(unittest.TestCase):
         self._run(["1", "9", "2", "", "0"])
 
         self.assertEqual(self.fetched, [("交易日历",)])
-        self.assertIn("编号应为 0~6 之间的数字", "\n".join(self.output))
+        self.assertIn("编号应为 0~7 之间的数字", "\n".join(self.output))
 
     def test_zero_at_the_dataset_menu_returns_without_fetching(self):
         code = self._run(["1", "0"])

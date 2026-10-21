@@ -7,6 +7,8 @@ from screener.sync.balancesheet import fetch_balancesheet
 from screener.sync.daily_basic import DATASET as DAILY_BASIC_DATASET
 from screener.sync.daily_basic import fetch_daily_basic
 from screener.sync.errors import SyncError
+from screener.sync.fina_indicator import DATASET as FINA_INDICATOR_DATASET
+from screener.sync.fina_indicator import fetch_fina_indicator
 from screener.sync.income import DATASET as INCOME_DATASET
 from screener.sync.income import fetch_income
 from screener.sync.stock_basic import DATASET as STOCK_BASIC_DATASET
@@ -25,6 +27,7 @@ DATASET_FETCHERS: dict[str, Callable[[sqlite3.Connection, object], int]] = {
     DAILY_BASIC_DATASET: fetch_daily_basic,
     INCOME_DATASET: fetch_income,
     BALANCESHEET_DATASET: fetch_balancesheet,
+    FINA_INDICATOR_DATASET: fetch_fina_indicator,
 }
 
 # 每个数据集的水位查询；整表替换的数据集写 None。键必须与 DATASET_FETCHERS 一致。
@@ -35,6 +38,7 @@ WATER_QUERIES: dict[str, str | None] = {
     DAILY_BASIC_DATASET: "SELECT MAX(trade_date) FROM daily_basic",
     INCOME_DATASET: "SELECT MAX(end_date) FROM income WHERE report_type = '2'",
     BALANCESHEET_DATASET: "SELECT MAX(end_date) FROM balancesheet WHERE report_type = '1'",
+    FINA_INDICATOR_DATASET: "SELECT MAX(end_date) FROM fina_indicator",
 }
 
 
