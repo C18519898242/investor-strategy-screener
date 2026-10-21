@@ -34,9 +34,7 @@ def values(ts_code="000001.SZ", period="20260930", **overrides):
 
 def collapse(*specs):
     """跑一遍 keep_latest，再把结果按列名还原成字典，方便断言。"""
-    rows = [
-        tuple({**dict.fromkeys(COLUMNS), **spec}[name] for name in COLUMNS) for spec in specs
-    ]
+    rows = [tuple({**dict.fromkeys(COLUMNS), **spec}[name] for name in COLUMNS) for spec in specs]
     return [dict(zip(COLUMNS, row, strict=False)) for row in keep_latest(rows)]
 
 
@@ -199,9 +197,7 @@ class BalancesheetTest(unittest.TestCase):
     def test_a_second_run_makes_no_request(self):
         fetch_balancesheet(
             self.connection,
-            FakeTushareClient(
-                balancesheet_rows=[statement("000001.SZ"), statement("000002.SZ")]
-            ),
+            FakeTushareClient(balancesheet_rows=[statement("000001.SZ"), statement("000002.SZ")]),
             today=TODAY,
         )
         client = FakeTushareClient()
