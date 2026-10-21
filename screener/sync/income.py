@@ -3,6 +3,7 @@ import sqlite3
 from datetime import date
 
 from screener.store import insert_rows
+from screener.sync.report_periods import target_periods
 from screener.sync.retry import call_with_retry
 
 logger = logging.getLogger(__name__)
@@ -112,22 +113,6 @@ COLUMNS: tuple[str, ...] = (
 
 # 一行财报的唯一标识，与建表时的主键一致。上游对同一期可能返回多个修订版本。
 KEY: tuple[str, ...] = ("ts_code", "end_date", "report_type", "ann_date", "update_flag")
-
-
-def target_periods(today: date) -> tuple[str, ...]:
-    """最近一个已经过了法定披露截止日的报告期。
-
-    按截止日算而不是按自然季度算：一季报的截止日是 4 月 30 日，按自然季度会在
-    1～3 月去拉一个还没人披露的 0331。4 月 30 日同时是上年年报的截止日，所以从
-    那天起两期一起补。
-    """
-    if (today.month, today.day) >= (10, 31):
-        return (f"{today.year}0930",)
-    if (today.month, today.day) >= (8, 31):
-        return (f"{today.year}0630",)
-    if (today.month, today.day) >= (4, 30):
-        return (f"{today.year}0331", f"{today.year - 1}1231")
-    return (f"{today.year - 1}0930",)
 
 
 def _codes_missing(connection: sqlite3.Connection, period: str) -> list[str]:

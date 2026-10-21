@@ -317,3 +317,42 @@ class RawTablesTest(unittest.TestCase):
             self.connection.execute("SELECT COUNT(*) FROM income").fetchone(),
             (2,),
         )
+
+    def test_balancesheet_table_matches_the_columns_the_sync_module_writes(self):
+        """建表语句和 `screener.sync.balancesheet.COLUMNS` 都是手写的，顺序错了会错列落库。"""
+        from screener.sync.balancesheet import COLUMNS as BALANCESHEET_COLUMNS
+
+        self.assertEqual(
+            [name for name, _ in self._columns("balancesheet")], list(BALANCESHEET_COLUMNS)
+        )
+
+    def test_balancesheet_primary_key_is_one_row_per_quarter(self):
+        """上游对同期会回多版本，落库前已经压成一行，所以主键里不能再有公告日。"""
+        primary = sorted((pk, name) for name, pk in self._columns("balancesheet") if pk)
+
+        self.assertEqual(
+            [name for _, name in primary],
+            ["ts_code", "end_date", "report_type"],
+        )
+
+    def test_balancesheet_has_an_end_date_index(self):
+        names = [
+            row[0]
+            for row in self.connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'balancesheet'"
+            )
+        ]
+
+        self.assertIn("idx_balancesheet_end_date", names)
+
+    def test_balancesheet_rejects_a_second_row_for_the_same_quarter(self):
+        columns = ("ts_code", "end_date", "report_type")
+        row = ("000001.SZ", "20260930", "1")
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            insert_rows(
+                self.connection,
+                table="balancesheet",
+                columns=columns,
+                rows=[row, row],
+            )

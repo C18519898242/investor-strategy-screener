@@ -37,6 +37,7 @@ strategies.md                     九集策略规则与共用数据源映射
 scripts/
   backup_db.py                    数据库一致性备份
   income_backfill.py              利润表全历史初始化
+  balancesheet_backfill.py        资产负债表全历史初始化
 sources/
   data-source-evaluation.md       第 1 集的数据源复核
   episode-01-graham/              格雷厄姆视频核对资料
@@ -118,6 +119,24 @@ uv run --locked python scripts/income_backfill.py --restart    # 清空 income �
 只存单季口径 `report_type=2`，累计口径不存：策略都按季度计算，两种口径并存会让下游每次先判断用哪一种。
 
 进度记录在 `data/income-backfill-done.txt`，Ctrl+C 中断后重跑会跳过已完成的部分。写入用 upsert（五列主键），重复执行不会产生重复行。**清空过表却留着进度文件，那些股票会被当成已完成而永久缺数据——要重灌必须带 `--restart`。**
+
+## 资产负债表全历史初始化
+
+菜单里的「资产负债表」同样只做增量，规则与利润表一致。目前只完成了回填与数据层，菜单项尚未接入。
+
+首次建库用 `scripts/balancesheet_backfill.py`。代理单次最多返回 100 行且**静默截断**，所以脚本逐只翻页（`has_more` + `offset`）直到取完，默认 20 并发，实测 4,329 只耗时 55 分钟：
+
+```bash
+uv run --locked python scripts/balancesheet_backfill.py              # 全量
+uv run --locked python scripts/balancesheet_backfill.py --limit 20   # 只看前 20 只试跑
+uv run --locked python scripts/balancesheet_backfill.py --restart    # 清空 balancesheet 表后重来
+```
+
+**一个季度只存一行。** 上游对同一报告期会返回多条（修正公告、`update_flag` 0/1 成对行、公告日不变但实际公告日推后的重述，实测平均 1.42 行/期），入库前按 `(f_ann_date, ann_date, update_flag)` 取最新的一条压成一行，主键是 `(ts_code, end_date, report_type)`。被重述覆盖的旧版本不保留。
+
+`report_type` 恒为 `1`（合并报表），上游没有单季或母公司版本。157 个字段全存，列名与 Tushare 同名。
+
+进度记录在 `data/balancesheet-backfill-done.txt`。20 并发会频繁撞代理限频（约 200 次/分钟），脚本对 429 等 30 秒重试；嫌吵就调小 `--workers`。**同样地，清空过表却留着进度文件，要重灌必须带 `--restart`。**
 
 ## 项目约束
 
