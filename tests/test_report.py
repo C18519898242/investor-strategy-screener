@@ -44,7 +44,9 @@ class ReportTest(unittest.TestCase):
         self.assertIn("<style>", html)
         self.assertNotIn("http://", html)
         self.assertNotIn("https://", html)
-        self.assertNotIn("<script", html)
+        # 排序脚本必须内联：页面允许本地脚本，但不能引用任何远程资源。
+        self.assertNotIn("<script src", html)
+        self.assertIn("<script>", html)
         for forbidden in ("pass", "fail", "insufficient_data"):
             self.assertNotIn(forbidden, html)
 
@@ -71,7 +73,34 @@ class ReportTest(unittest.TestCase):
         )
 
         self.assertIn('<td class="num">36.02</td>', html)
-        self.assertIn('<th class="num">roe</th>', html)
+        self.assertIn('<th class="num">roe<span class="caret"></span></th>', html)
+
+    def test_sort_keys_are_written_into_the_cell_that_can_be_sorted(self):
+        html = render_html(
+            strategy_name="格雷厄姆（可用）",
+            trade_date="2026-10-16",
+            synced_at=None,
+            rows=[
+                {"code": "600519", "name": "贵州茅台", "ROE（%）": "36.02 / 34.00 / 30.00"},
+                {"code": "000858", "name": "五粮液", "ROE（%）": "25.00 / 24.00 / 23.00"},
+            ],
+            display_fields=("ROE（%）",),
+            sort_values={"ROE（%）": [33.34, 24.0]},
+        )
+
+        self.assertIn('data-sort="33.340000"', html)
+        self.assertIn('data-sort="24.000000"', html)
+
+    def test_without_sort_keys_the_cell_carries_no_sort_attribute(self):
+        html = render_html(
+            strategy_name="格雷厄姆（可用）",
+            trade_date="2026-10-16",
+            synced_at=None,
+            rows=[{"code": "600519", "name": "贵州茅台", "roe": "36.02"}],
+            display_fields=("roe",),
+        )
+
+        self.assertNotIn("data-sort=", html)
 
     def test_same_timestamp_adds_sequence_without_overwrite(self):
         generated_at = dt.datetime(2026, 10, 11, 18, 5, 21)

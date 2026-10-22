@@ -378,8 +378,18 @@ def _years(annuals: list[str], values: dict[str, float], render) -> str:
     return " / ".join(render(values[period]) for period in annuals)
 
 
+def _mean(values) -> float:
+    """三年度那一列的排序键：按三年均值比大小。"""
+    materialized = list(values)
+    return float(sum(materialized) / len(materialized))
+
+
 def screen(connection: sqlite3.Connection, trade_date: str) -> pd.DataFrame:
-    """筛选并按展示口径格式化，返回给报告用的行。"""
+    """筛选并按展示口径格式化，返回给报告用的行。
+
+    `attrs["sort_values"]` 是每一列的排序键（未舍入的原始值）：展示值四舍五入过，
+    拿字符串比大小会排错；三年度那几列按三年均值比。
+    """
     passed = evaluate(connection, trade_date)
     if passed.empty:
         return passed
@@ -389,6 +399,7 @@ def screen(connection: sqlite3.Connection, trade_date: str) -> pd.DataFrame:
     ][:ANNUAL_YEARS]
 
     rows = []
+    sort_values: dict[str, list[float]] = {field: [] for field in DISPLAY_FIELDS}
     for row in passed.itertuples(index=False):
         roe = {period: getattr(row, f"roe{_year_of(period)}") for period in annuals}
         profit = {period: getattr(row, f"profit{_year_of(period)}") for period in annuals}
@@ -409,12 +420,24 @@ def screen(connection: sqlite3.Connection, trade_date: str) -> pd.DataFrame:
                 "总市值（亿元）": f"{row.market_cap / 10000:.2f}",
             }
         )
+        sort_values["格雷厄姆数"].append(float(row.graham))
+        sort_values["市盈率（TTM）"].append(float(row.pe_ttm))
+        sort_values["市净率"].append(float(row.pb))
+        sort_values["平均市盈率"].append(float(row.average_pe))
+        sort_values["ROE（%）"].append(_mean(roe.values()))
+        sort_values["归母净利润（亿元）"].append(_mean(profit.values()) / 100_000_000)
+        sort_values["股息率（%）"].append(_mean(yields.values()) * 100)
+        sort_values["流动比率"].append(float(row.current_ratio))
+        sort_values["营运资本/长期负债"].append(float(row.working_capital_ratio))
+        sort_values["总市值（亿元）"].append(float(row.market_cap) / 10000)
+
     frame = pd.DataFrame(rows)
     frame.attrs["note"] = (
         "ROE、归母净利润、股息率是近 3 年，按新到旧排列："
         + " / ".join(_year_of(period) for period in annuals)
-        + "；平均市盈率是近 12 个季度样本的均值"
+        + "；平均市盈率是近 12 个季度样本的均值；点列头排序时这三列按三年均值比"
     )
+    frame.attrs["sort_values"] = sort_values
     return frame
 
 

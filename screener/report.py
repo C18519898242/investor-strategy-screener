@@ -71,7 +71,54 @@ _STYLE = """  :root {
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .wrap { white-space: normal; min-width: 15ch; }
   .empty { margin: 0; padding: 56px 24px; text-align: center; color: var(--muted); }
-  footer { margin-top: 14px; color: var(--muted); font-size: 12.5px; text-align: right; }"""
+  footer { margin-top: 14px; color: var(--muted); font-size: 12.5px; text-align: right; }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--ink); }
+  th .caret { margin-left: 4px; font-size: 10px; opacity: 0.8; }"""
+
+_SCRIPT = """(function () {
+  var table = document.querySelector("table");
+  if (!table || !table.tBodies.length) return;
+  var body = table.tBodies[0];
+  var headers = table.tHead.rows[0].cells;
+  var state = {};
+  function key(row, index) {
+    var cell = row.cells[index];
+    if (!cell) return "";
+    return cell.dataset.sort === undefined
+      ? cell.textContent.trim()
+      : parseFloat(cell.dataset.sort);
+  }
+  function compare(left, right, index, sign) {
+    var a = key(left, index);
+    var b = key(right, index);
+    if (typeof a === "number" && typeof b === "number") {
+      if (a === b) return 0;
+      return (a < b ? -1 : 1) * sign;
+    }
+    return String(a).localeCompare(String(b), "zh-Hans-CN") * sign;
+  }
+  Array.prototype.forEach.call(headers, function (header, index) {
+    header.classList.add("sortable");
+    header.addEventListener("click", function () {
+      state[index] = state[index] === "asc" ? "desc" : "asc";
+      var sign = state[index] === "asc" ? 1 : -1;
+      var rows = Array.prototype.slice.call(body.rows);
+      rows.sort(function (left, right) {
+        return compare(left, right, index, sign) || left.rowIndex - right.rowIndex;
+      });
+      rows.forEach(function (row) { body.appendChild(row); });
+      Array.prototype.forEach.call(headers, function (other) {
+        other.removeAttribute("aria-sort");
+        var caret = other.querySelector(".caret");
+        if (caret) caret.textContent = "";
+      });
+      header.setAttribute("aria-sort", sign === 1 ? "ascending" : "descending");
+      var caret = header.querySelector(".caret");
+      if (caret) caret.textContent = sign === 1 ? "\\u25b2" : "\\u25bc";
+    });
+  });
+})();"""
 
 
 def render_html(
@@ -82,10 +129,20 @@ def render_html(
     rows: list[dict[str, str]],
     display_fields: tuple[str, ...],
     note: str | None = None,
+    sort_values: dict[str, list[float]] | None = None,
 ) -> str:
+    """`sort_values` 给出每列每行的原始数值，写进 `data-sort`，点列头时按它排。
+
+    有它才排得对：展示值是四舍五入过的，「近 3 年」那几列还要按三年均值比大小，
+    所以排序键由策略那边算好，报告只负责写进属性。
+    """
     updated = "无" if synced_at is None else synced_at
     fields = (*_COLUMNS, *((field, field) for field in display_fields))
-    body = _table(rows, fields) if rows else '<p class="empty">本次无符合条件的股票</p>'
+    body = (
+        _table(rows, fields, sort_values or {})
+        if rows
+        else '<p class="empty">本次无符合条件的股票</p>'
+    )
     lines = [
         "<!DOCTYPE html>",
         '<html lang="zh-CN">',
@@ -109,8 +166,11 @@ def render_html(
         + (f'<span class="note">{escape(note)}</span>' if note else "")
         + "</p>",
         body,
-        "  <footer>仅使用本地已保存数据</footer>",
+        "  <footer>仅使用本地已保存数据；点列头可排序，再点一次反向</footer>",
         "</main>",
+        "<script>",
+        _SCRIPT,
+        "</script>",
         "</body>",
         "</html>",
         "",
@@ -118,20 +178,22 @@ def render_html(
     return "\n".join(lines)
 
 
-def _table(rows: list[dict[str, str]], fields: tuple[tuple[str, str], ...]) -> str:
+def _table(
+    rows: list[dict[str, str]],
+    fields: tuple[tuple[str, str], ...],
+    sort_values: dict[str, list[float]],
+) -> str:
     numeric = _numeric_fields(rows, fields)
     wrapped = _wide_fields(rows, fields)
     head = "".join(
-        f"<th{_classes(field, numeric, wrapped)}>{escape(label)}</th>" for field, label in fields
+        f'<th{_classes(field, numeric, wrapped)}>{escape(label)}<span class="caret"></span></th>'
+        for field, label in fields
     )
     body = "\n".join(
         "        <tr>"
-        + "".join(
-            f"<td{_classes(field, numeric, wrapped)}>{escape(_value(row, field))}</td>"
-            for field, _ in fields
-        )
+        + "".join(_cell(row, field, index, numeric, wrapped, sort_values) for field, _ in fields)
         + "</tr>"
-        for row in rows
+        for index, row in enumerate(rows)
     )
     return "\n".join(
         [
@@ -147,6 +209,22 @@ def _table(rows: list[dict[str, str]], fields: tuple[tuple[str, str], ...]) -> s
             "  </div>",
         ]
     )
+
+
+def _cell(
+    row: dict[str, str],
+    field: str,
+    index: int,
+    numeric: set[str],
+    wrapped: set[str],
+    sort_values: dict[str, list[float]],
+) -> str:
+    classes = _classes(field, numeric, wrapped)
+    keys = sort_values.get(field)
+    text = escape(_value(row, field))
+    if keys is None or index >= len(keys) or keys[index] is None:
+        return f"<td{classes}>{text}</td>"
+    return f'<td{classes} data-sort="{keys[index]:.6f}">{text}</td>'
 
 
 def _classes(field: str, numeric: set[str], wrapped: set[str]) -> str:

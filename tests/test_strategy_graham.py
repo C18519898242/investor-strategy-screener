@@ -252,8 +252,18 @@ class ScreenTest(unittest.TestCase):
         self.assertEqual(
             frame.attrs["note"],
             "ROE、归母净利润、股息率是近 3 年，按新到旧排列：2025 / 2024 / 2023；"
-            "平均市盈率是近 12 个季度样本的均值",
+            "平均市盈率是近 12 个季度样本的均值；点列头排序时这三列按三年均值比",
         )
+
+    def test_three_year_columns_sort_by_their_mean(self):
+        frame = graham.screen(self.connection, TRADE_DATE)
+        keys = frame.attrs["sort_values"]
+
+        self.assertEqual(keys["格雷厄姆数"], [8.0])
+        self.assertEqual(keys["ROE（%）"], [12.5])
+        self.assertEqual(keys["归母净利润（亿元）"], [10.0])
+        self.assertEqual(keys["股息率（%）"], [2.0])
+        self.assertEqual(keys["总市值（亿元）"], [100.0])
 
     def test_banks_are_not_in_the_pool(self):
         codes = set(graham.evaluate(self.connection, TRADE_DATE)["code"])
