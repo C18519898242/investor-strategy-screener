@@ -48,6 +48,31 @@ class ReportTest(unittest.TestCase):
         for forbidden in ("pass", "fail", "insufficient_data"):
             self.assertNotIn(forbidden, html)
 
+    def test_the_note_is_shown_next_to_the_count(self):
+        html = render_html(
+            strategy_name="格雷厄姆（可用）",
+            trade_date="2026-10-16",
+            synced_at="2026-10-23 00:09:14",
+            rows=[{"code": "600519", "name": "贵州茅台", "roe": "36.02"}],
+            display_fields=("roe",),
+            note="近 3 年按新到旧排列：2025 / 2024 / 2023",
+        )
+
+        self.assertIn("近 3 年按新到旧排列：2025 / 2024 / 2023", html)
+        self.assertIn('<span class="note">', html)
+
+    def test_numeric_columns_are_right_aligned(self):
+        html = render_html(
+            strategy_name="格雷厄姆（可用）",
+            trade_date="2026-10-16",
+            synced_at=None,
+            rows=[{"code": "600519", "name": "贵州茅台", "roe": "36.02"}],
+            display_fields=("roe",),
+        )
+
+        self.assertIn('<td class="num">36.02</td>', html)
+        self.assertIn('<th class="num">roe</th>', html)
+
     def test_same_timestamp_adds_sequence_without_overwrite(self):
         generated_at = dt.datetime(2026, 10, 11, 18, 5, 21)
         first = write_result(

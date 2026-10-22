@@ -152,6 +152,7 @@ def _screen_menu(connection, strategies, output_root, input_fn, output_fn) -> in
         synced_at=last_successful_sync_at(connection),
         rows=rows,
         display_fields=strategy.spec.display_fields,
+        note=frame.attrs.get("note"),
     )
     path = write_result(
         output_root,

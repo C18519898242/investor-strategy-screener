@@ -236,17 +236,24 @@ class ScreenTest(unittest.TestCase):
         self.assertEqual(list(rows["code"]), ["000001.SZ"])
 
     def test_the_displayed_numbers_follow_the_agreed_units(self):
-        row = graham.screen(self.connection, TRADE_DATE).iloc[0].to_dict()
+        frame = graham.screen(self.connection, TRADE_DATE)
+        row = frame.iloc[0].to_dict()
 
         self.assertEqual(row["格雷厄姆数"], "8.00")
-        self.assertEqual(row["当前市盈率（TTM）"], "10.00")
+        self.assertEqual(row["市盈率（TTM）"], "10.00")
         self.assertEqual(row["市净率"], "0.80")
-        self.assertEqual(row["近 3 年平均市盈率"], "10.00")
-        self.assertEqual(row["近 3 年 ROE"], "2025 12.50% / 2024 12.50% / 2023 12.50%")
-        self.assertEqual(row["近 3 年股息率"], "2025 2.00% / 2024 2.00% / 2023 2.00%")
+        self.assertEqual(row["平均市盈率"], "10.00")
+        self.assertEqual(row["ROE（%）"], "12.50 / 12.50 / 12.50")
+        self.assertEqual(row["归母净利润（亿元）"], "10.00 / 10.00 / 10.00")
+        self.assertEqual(row["股息率（%）"], "2.00 / 2.00 / 2.00")
         self.assertEqual(row["流动比率"], "5.00")
         self.assertEqual(row["营运资本/长期负债"], "4.00")
-        self.assertEqual(row["总市值"], "100.00 亿元")
+        self.assertEqual(row["总市值（亿元）"], "100.00")
+        self.assertEqual(
+            frame.attrs["note"],
+            "ROE、归母净利润、股息率是近 3 年，按新到旧排列：2025 / 2024 / 2023；"
+            "平均市盈率是近 12 个季度样本的均值",
+        )
 
     def test_banks_are_not_in_the_pool(self):
         codes = set(graham.evaluate(self.connection, TRADE_DATE)["code"])

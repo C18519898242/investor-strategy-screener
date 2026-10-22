@@ -41,15 +41,15 @@ ANNUAL_YEARS = 3
 
 DISPLAY_FIELDS: tuple[str, ...] = (
     "格雷厄姆数",
-    "当前市盈率（TTM）",
+    "市盈率（TTM）",
     "市净率",
-    "近 3 年平均市盈率",
-    "近 3 年 ROE",
-    "近 3 年归母净利润",
-    "近 3 年股息率",
+    "平均市盈率",
+    "ROE（%）",
+    "归母净利润（亿元）",
+    "股息率（%）",
     "流动比率",
     "营运资本/长期负债",
-    "总市值",
+    "总市值（亿元）",
 )
 
 _EMPTY = pd.DataFrame(columns=["code", "name", "graham"])
@@ -360,22 +360,22 @@ def evaluate(connection: sqlite3.Connection, trade_date: str) -> pd.DataFrame:
 
 
 def _percent(value: float) -> str:
-    """`fina_indicator.roe_waa` 和股息率都已经是百分数口径之外的小数，统一乘 100。"""
-    return f"{value * 100:.2f}%"
+    return f"{value * 100:.2f}"
 
 
 def _roe_percent(value: float) -> str:
     """`roe_waa` 本身就是百分数（19.32 表示 19.32%），不再乘 100。"""
-    return f"{value:.2f}%"
+    return f"{value:.2f}"
 
 
-def _yuan_to_yi(value: float) -> str:
-    return f"{value / 100_000_000:.2f} 亿元"
+def _yi(value: float) -> str:
+    """金额从元换成亿元。"""
+    return f"{value / 100_000_000:.2f}"
 
 
 def _years(annuals: list[str], values: dict[str, float], render) -> str:
-    """把三年的数值拼成 `2023 x / 2024 y / 2025 z`。"""
-    return " / ".join(f"{_year_of(period)} {render(values[period])}" for period in annuals)
+    """三年拼成一行 `8.10 / 7.13 / 10.87`；年份顺序写在表头下的说明里。"""
+    return " / ".join(render(values[period]) for period in annuals)
 
 
 def screen(connection: sqlite3.Connection, trade_date: str) -> pd.DataFrame:
@@ -398,18 +398,24 @@ def screen(connection: sqlite3.Connection, trade_date: str) -> pd.DataFrame:
                 "code": row.code,
                 "name": row.name,
                 "格雷厄姆数": f"{row.graham:.2f}",
-                "当前市盈率（TTM）": f"{row.pe_ttm:.2f}",
+                "市盈率（TTM）": f"{row.pe_ttm:.2f}",
                 "市净率": f"{row.pb:.2f}",
-                "近 3 年平均市盈率": f"{row.average_pe:.2f}",
-                "近 3 年 ROE": _years(annuals, roe, _roe_percent),
-                "近 3 年归母净利润": _years(annuals, profit, _yuan_to_yi),
-                "近 3 年股息率": _years(annuals, yields, _percent),
+                "平均市盈率": f"{row.average_pe:.2f}",
+                "ROE（%）": _years(annuals, roe, _roe_percent),
+                "归母净利润（亿元）": _years(annuals, profit, _yi),
+                "股息率（%）": _years(annuals, yields, _percent),
                 "流动比率": f"{row.current_ratio:.2f}",
                 "营运资本/长期负债": f"{row.working_capital_ratio:.2f}",
-                "总市值": f"{row.market_cap / 10000:.2f} 亿元",
+                "总市值（亿元）": f"{row.market_cap / 10000:.2f}",
             }
         )
-    return pd.DataFrame(rows)
+    frame = pd.DataFrame(rows)
+    frame.attrs["note"] = (
+        "ROE、归母净利润、股息率是近 3 年，按新到旧排列："
+        + " / ".join(_year_of(period) for period in annuals)
+        + "；平均市盈率是近 12 个季度样本的均值"
+    )
+    return frame
 
 
 class GrahamStrategy(Strategy):
