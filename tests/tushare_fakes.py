@@ -12,6 +12,7 @@ import pandas as pd
 
 from screener.sync.balancesheet import COLUMNS as BALANCESHEET_COLUMNS
 from screener.sync.daily_basic import COLUMNS as DAILY_BASIC_COLUMNS
+from screener.sync.dividend import COLUMNS as DIVIDEND_COLUMNS
 from screener.sync.fina_indicator import COLUMNS as FINA_INDICATOR_COLUMNS
 from screener.sync.income import COLUMNS as INCOME_COLUMNS
 from screener.sync.stock_basic import COLUMNS as STOCK_BASIC_COLUMNS
@@ -47,6 +48,11 @@ def balancesheet_row(**overrides):
 def fina_indicator_row(**overrides):
     """一行 fina_indicator 的 109 列，默认全是 None。"""
     return {**dict.fromkeys(FINA_INDICATOR_COLUMNS, None), **overrides}
+
+
+def dividend_row(**overrides):
+    """一行 dividend 的 16 列，默认全是 None。"""
+    return {**dict.fromkeys(DIVIDEND_COLUMNS, None), **overrides}
 
 
 class FakeTushareClient:

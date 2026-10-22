@@ -394,3 +394,41 @@ class RawTablesTest(unittest.TestCase):
                 columns=columns,
                 rows=[row, row],
             )
+
+    def test_dividend_table_matches_the_columns_the_sync_module_writes(self):
+        """建表语句和 `screener.sync.dividend.COLUMNS` 都是手写的，顺序错了会错列落库。"""
+        from screener.sync.dividend import COLUMNS as DIVIDEND_COLUMNS
+
+        self.assertEqual(
+            [name for name, _ in self._columns("dividend")],
+            list(DIVIDEND_COLUMNS),
+        )
+
+    def test_dividend_primary_key_is_one_row_per_scheme(self):
+        """只存已实施的方案，同一报告期已在上游侧压成一行，主键里不再有公告日。"""
+        primary = sorted((pk, name) for name, pk in self._columns("dividend") if pk)
+
+        self.assertEqual([name for _, name in primary], ["ts_code", "end_date"])
+
+    def test_dividend_has_an_end_date_index_and_a_stock_ex_date_index(self):
+        names = [
+            row[0]
+            for row in self.connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'dividend'"
+            )
+        ]
+
+        self.assertIn("idx_dividend_end_date", names)
+        self.assertIn("idx_dividend_ex_date", names)
+
+    def test_dividend_rejects_a_second_row_for_the_same_scheme(self):
+        columns = ("ts_code", "end_date")
+        row = ("600519.SH", "20241231")
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            insert_rows(
+                self.connection,
+                table="dividend",
+                columns=columns,
+                rows=[row, row],
+            )

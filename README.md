@@ -39,6 +39,7 @@ scripts/
   income_backfill.py              利润表全历史初始化
   balancesheet_backfill.py        资产负债表全历史初始化
   fina_indicator_backfill.py      财务指标全历史初始化
+  dividend_backfill.py            分红送配全历史初始化
 sources/
   data-source-evaluation.md       第 1 集的数据源复核
   episode-01-graham/              格雷厄姆视频核对资料
@@ -156,6 +157,33 @@ uv run --locked python scripts/fina_indicator_backfill.py --restart    # 清空 
 **`fields` 必须显式列全 109 列**：逐股路径不传 `fields` 时只返回 108 列、**缺 `update_flag`**，省掉就等于丢掉版本信息。`start_date`/`end_date` 在该接口是**报告期**语义，与利润表、资产负债表的公告日语义不同。
 
 进度记录在 `data/fina-indicator-backfill-done.txt`。**同样地，清空过表却留着进度文件，要重灌必须带 `--restart`。**
+
+## 分红送配全历史初始化
+
+菜单里的「分红送配」只做增量，水位是 `MAX(record_date)`（股权登记日，且按今天截断——回填会带进已公告但未到登记日的方案，不截断会跳过中间的日子），每次把水位之后的每个交易日各取一次，其余时间点运行不会发起请求。表是空的时候不发请求——历史交给下面的回填脚本，菜单不猜起点。
+
+首次建库用 `scripts/dividend_backfill.py`。逐股一次调用就拿到全部历史，**不用翻页**（实测最长的股票也只有 98 行，远低于 2,000 行的每页上限），默认 20 并发：
+
+```bash
+uv run --locked python scripts/dividend_backfill.py              # 全量
+uv run --locked python scripts/dividend_backfill.py --limit 20   # 只看前 20 只试跑
+uv run --locked python scripts/dividend_backfill.py --restart    # 清空 dividend 表后重来
+```
+
+**只存已经实施的方案**（`div_proc='实施'`），未实施的预案不入库。上游对同一笔分红会按进度追加行（预案 → 股东大会通过 → 实施，实测还有预披露、股东提议、股东大会未通过、未通过、停止实施），抽样里实施行只占 23%，其余对第 1 集没有用。
+
+**一个方案一行**，主键 `(ts_code, end_date)`。同一报告期的多条实施行按 `(imp_ann_date, ann_date)` 取最新一条（茅台 2024 年报原始 5 行，压成 1 行）。**同一个报告期不会出现两笔金额不同的实施分红**（抽样 100 个方案里 0 个），所以两列主键够。
+
+**同一笔被挂到两个报告期**时要再收一次：宁德时代 2024 中期那笔 1.23 元同时出现在 `20240930` 和 `20241211` 下，`ex_date` 都是 `20250124`，两列主键压不掉。按 `(ts_code, ex_date, cash_div_tax)` 保留报告期较早的那条。
+
+**参数上踩过的坑**（都是实测）：
+
+- `start_date` 不支持。单独传报 `50101 参数校验失败`，带 `ts_code` 时被无视（返回的行和不传一样），跟 `end_date` 一起传则静默返回 0 行。
+- `record_date` 是**精确匹配的单日**（`record_date=20250626` → 137 行），所以「`record_date > MAX`」只能靠 `trade_cal` 逐个交易日枚举。
+- `end_date=` 只在按报告期取全市场时有用，**每页硬顶 2,000 行**（比资产负债表的 100 行高），`offset` 翻页；实测 2024 年报 15,111 行 / 8 次调用 / 49 秒。
+- 增量这条路走**直连代理**：生产 SDK 代理不接受 `dividend` 的 `end_date` 单独过滤（`400 invalid_params`），只认 `ts_code` 这类官方参数。
+
+进度记录在 `data/dividend-backfill-done.txt`。**同样地，清空过表却留着进度文件，要重灌必须带 `--restart`。**
 
 ## 项目约束
 

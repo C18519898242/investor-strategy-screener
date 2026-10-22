@@ -519,6 +519,33 @@ def open_database(path: Path) -> sqlite3.Connection:
     connection.execute(
         "CREATE INDEX IF NOT EXISTS idx_fina_indicator_end_date ON fina_indicator (end_date)"
     )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS dividend (
+            ts_code TEXT NOT NULL,
+            end_date TEXT NOT NULL,
+            ann_date TEXT,
+            div_proc TEXT,
+            stk_div REAL,
+            stk_bo_rate REAL,
+            stk_co_rate REAL,
+            cash_div REAL,
+            cash_div_tax REAL,
+            record_date TEXT,
+            ex_date TEXT,
+            pay_date TEXT,
+            div_listdate TEXT,
+            imp_ann_date TEXT,
+            base_date TEXT,
+            base_share REAL,
+            PRIMARY KEY (ts_code, end_date)
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_dividend_end_date ON dividend (end_date)")
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_dividend_ex_date ON dividend (ts_code, ex_date)"
+    )
     return connection
 
 
