@@ -57,8 +57,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from screener.config import load_settings
-from screener.store import open_database
-from screener.sync.fina_indicator import COLUMNS, KEY, keep_latest
+from screener.store import open_database, publish_backfill
+from screener.sync.fina_indicator import COLUMNS, DATASET, KEY, keep_latest
 
 BASE = "https://datahubco.com/api/tushare"
 DATABASE = ROOT / "data" / "screener.sqlite3"
@@ -343,6 +343,11 @@ def main() -> None:
     print_summary(connection, rows_written, failures, started)
     if failures:
         print("有失败的股票。失败的不写续跑记录，重新运行本脚本会自动补这些。", flush=True)
+    publish_backfill(
+        connection,
+        dataset=DATASET,
+        row_count=connection.execute("SELECT COUNT(*) FROM fina_indicator").fetchone()[0],
+    )
     connection.close()
 
 

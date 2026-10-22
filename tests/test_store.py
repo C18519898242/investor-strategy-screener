@@ -6,6 +6,7 @@ from screener.store import (
     begin_sync,
     last_successful_sync_at,
     open_database,
+    publish_backfill,
     published_datasets,
 )
 
@@ -51,3 +52,15 @@ class StoreVisibilityTest(unittest.TestCase):
 
         self.assertEqual(last_successful_sync_at(connection), "2026-10-12 09:00:00")
         self.assertEqual(published_datasets(connection), frozenset({"prices", "financials"}))
+
+    def test_a_backfill_registration_makes_the_dataset_ready(self):
+        """回填脚本直接写表、不留批次，收尾登记一次才不会被判成「数据不完整」。"""
+        connection = open_database(self.path)
+
+        stamp = publish_backfill(
+            connection, dataset="利润表", row_count=123, finished_at="2026-10-11 09:00:00"
+        )
+
+        self.assertEqual(stamp, "2026-10-11 09:00:00")
+        self.assertEqual(published_datasets(connection), frozenset({"利润表"}))
+        self.assertEqual(last_successful_sync_at(connection), "2026-10-11 09:00:00")

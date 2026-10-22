@@ -1,6 +1,7 @@
 import logging
 import sqlite3
 from collections.abc import Iterable, Sequence
+from datetime import datetime
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -645,3 +646,23 @@ def published_datasets(connection: sqlite3.Connection) -> frozenset[str]:
 def begin_sync(connection: sqlite3.Connection) -> SyncBatch:
     cursor = connection.execute("INSERT INTO sync_batch (state) VALUES ('open')")
     return SyncBatch(connection, cursor.lastrowid)
+
+
+def publish_backfill(
+    connection: sqlite3.Connection,
+    *,
+    dataset: str,
+    row_count: int,
+    finished_at: str | None = None,
+) -> str:
+    """回填脚本写完后补记一次成功批次。
+
+    菜单的「就绪」判定只看成功批次里出现过的数据集，而回填脚本是直接写表、不留批次，
+    这样建出来的库会让筛选永远报「本地数据不完整」。所以脚本收尾时登记一次。
+    """
+    stamp = finished_at or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    batch = begin_sync(connection)
+    batch.record(dataset, row_count)
+    batch.publish(stamp)
+    logger.debug("回填登记：%s %d 行（%s）", dataset, row_count, stamp)
+    return stamp
