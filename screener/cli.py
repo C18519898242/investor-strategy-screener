@@ -3,8 +3,6 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
-import pandas as pd
-
 from screener.config import Settings
 from screener.logging import setup_logging
 from screener.report import render_html, write_result
@@ -98,6 +96,18 @@ def _sync_menu(connection, settings, fetch, clock, input_fn, output_fn) -> int:
         input_fn("按回车继续")
 
 
+def _previous_trade_date(connection, day: datetime) -> str | None:
+    """该日或之前最近一个交易日（`YYYYMMDD`）。"""
+    row = connection.execute(
+        """
+        SELECT MAX(cal_date) FROM trade_cal
+        WHERE exchange = 'SSE' AND is_open = 1 AND cal_date <= ?
+        """,
+        (day.strftime("%Y%m%d"),),
+    ).fetchone()
+    return None if row is None else row[0]
+
+
 def _screen_menu(connection, strategies, output_root, input_fn, output_fn) -> int:
     output_fn("选择策略")
     for index, strategy in enumerate(strategies, start=1):
@@ -106,15 +116,22 @@ def _screen_menu(connection, strategies, output_root, input_fn, output_fn) -> in
     choice = input_fn("请选择：")
     if choice == "0":
         return 0
-    strategy = strategies[int(choice) - 1]
-    trade_date = input_fn("筛选日期（留空＝上一交易日；格式 YYYY-MM-DD）：")
-    if trade_date == "":
-        output_fn("本地交易日历尚未就绪")
+    if not choice.isdigit() or not 1 <= int(choice) <= len(strategies):
+        output_fn(f"编号应为 0~{len(strategies)} 之间的数字")
         return 0
-    try:
-        datetime.strptime(trade_date, "%Y-%m-%d")
-    except ValueError:
-        output_fn("日期格式应为 YYYY-MM-DD")
+    strategy = strategies[int(choice) - 1]
+    entered = input_fn("筛选日期（留空＝上一交易日；格式 YYYY-MM-DD）：")
+    if entered == "":
+        day = datetime.now()
+    else:
+        try:
+            day = datetime.strptime(entered, "%Y-%m-%d")
+        except ValueError:
+            output_fn("日期格式应为 YYYY-MM-DD")
+            return 0
+    trade_date = _previous_trade_date(connection, day)
+    if trade_date is None:
+        output_fn("本地交易日历尚未就绪，请先更新本地数据")
         return 0
     try:
         assert_ready(connection, strategy)
@@ -127,11 +144,7 @@ def _screen_menu(connection, strategies, output_root, input_fn, output_fn) -> in
     output_fn(f"使用行情交易日：{trade_date}")
     logger.info("开始筛选：%s（%s）", strategy.spec.menu_name, trade_date)
     output_fn("正在读取本地数据并筛选……")
-    try:
-        frame = strategy.screen(pd.DataFrame())
-    except NotImplementedError as error:
-        logger.error("%s", error)
-        return 0
+    frame = strategy.screen(connection, trade_date)
     rows = frame.to_dict("records")
     html = render_html(
         strategy_name=strategy.spec.menu_name,

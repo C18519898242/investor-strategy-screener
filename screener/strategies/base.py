@@ -1,3 +1,4 @@
+import sqlite3
 from dataclasses import dataclass
 
 import pandas as pd
@@ -15,5 +16,6 @@ class StrategySpec:
 class Strategy:
     spec: StrategySpec
 
-    def screen(self, frame: pd.DataFrame) -> pd.DataFrame:
+    def screen(self, connection: sqlite3.Connection, trade_date: str) -> pd.DataFrame:
+        """返回展示用的行；`trade_date` 是 `YYYYMMDD` 的交易日。"""
         raise NotImplementedError

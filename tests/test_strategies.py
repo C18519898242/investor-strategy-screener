@@ -1,12 +1,11 @@
 import unittest
 
-import pandas as pd
-
 from screener.strategies import load_builtin_strategies
+from screener.strategies.episode_01_graham import DISPLAY_FIELDS, GrahamStrategy
 
 
 class StrategyRegistryTest(unittest.TestCase):
-    def test_graham_registers_menu_and_output_without_formula(self):
+    def test_graham_registers_the_menu_entry_and_the_datasets_it_reads(self):
         strategies = load_builtin_strategies()
 
         self.assertEqual(len(strategies), 1)
@@ -14,7 +13,27 @@ class StrategyRegistryTest(unittest.TestCase):
         self.assertEqual(spec.strategy_id, "episode-01-graham")
         self.assertEqual(spec.menu_name, "格雷厄姆（可用）")
         self.assertEqual(spec.output_dir, "episode-01-graham")
-        self.assertEqual(spec.required_datasets, ("股票列表", "交易日历"))
-        self.assertEqual(spec.display_fields, ())
-        with self.assertRaisesRegex(NotImplementedError, "第 1 集筛选尚未实现"):
-            strategies[0].screen(pd.DataFrame())
+        self.assertEqual(
+            spec.required_datasets,
+            (
+                "股票列表",
+                "交易日历",
+                "停复牌",
+                "每日指标",
+                "利润表",
+                "资产负债表",
+                "财务指标",
+                "分红送配",
+            ),
+        )
+        self.assertEqual(spec.display_fields, DISPLAY_FIELDS)
+
+    def test_the_registered_strategy_screens_from_the_database(self):
+        """菜单拿到的是可调用的筛选函数，不是占位实现。"""
+        strategy = GrahamStrategy()
+
+        self.assertTrue(callable(strategy.screen))
+
+
+if __name__ == "__main__":
+    unittest.main()

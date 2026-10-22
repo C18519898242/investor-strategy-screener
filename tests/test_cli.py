@@ -8,7 +8,7 @@ import pandas as pd
 from screener.cli import main
 from screener.config import Settings
 from screener.logging import shutdown_logging
-from screener.store import begin_sync, open_database, published_datasets
+from screener.store import begin_sync, insert_rows, open_database, published_datasets
 from screener.strategies.base import Strategy, StrategySpec
 from screener.strategies.episode_01_graham import GrahamStrategy
 from tests.tushare_fakes import FakeTushareClient, stock_basic_row
@@ -39,7 +39,7 @@ class ReadyStrategy(Strategy):
         display_fields=(),
     )
 
-    def screen(self, frame: pd.DataFrame) -> pd.DataFrame:
+    def screen(self, connection, trade_date):
         return pd.DataFrame()
 
 
@@ -163,13 +163,36 @@ class MenuTest(unittest.TestCase):
         self.assertEqual(self.fetch_calls, 0)
         self.assertFalse((self.root / "outputs").exists())
 
+    def test_a_blank_date_falls_back_to_the_previous_trading_day(self):
+        insert_rows(
+            self.connection,
+            table="trade_cal",
+            columns=("exchange", "cal_date", "is_open"),
+            rows=[("SSE", "20261016", 1)],
+        )
+        batch = begin_sync(self.connection)
+        batch.record("prices", 3)
+        batch.record("financials", 3)
+        batch.publish("2026-10-11 09:00:00")
+        self.output.clear()
+
+        self._run(["2", "1", "", ""])
+
+        self.assertIn("使用行情交易日：20261016", "\n".join(self.output))
+
     def test_partial_data_does_not_create_html(self):
+        insert_rows(
+            self.connection,
+            table="trade_cal",
+            columns=("exchange", "cal_date", "is_open"),
+            rows=[("SSE", "20261016", 1)],
+        )
         batch = begin_sync(self.connection)
         batch.record("prices", 3)
         batch.publish("2026-10-11 09:00:00")
         self.output.clear()
 
-        self._run(["2", "1", "2026-10-10"])
+        self._run(["2", "1", "2026-10-16"])
 
         self.assertIn("本地数据不完整，无法筛选", "\n".join(self.output))
         self.assertFalse((self.root / "outputs").exists())
