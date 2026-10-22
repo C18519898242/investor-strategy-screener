@@ -6,6 +6,8 @@ from screener.sync.balancesheet import DATASET as BALANCESHEET_DATASET
 from screener.sync.balancesheet import fetch_balancesheet
 from screener.sync.daily_basic import DATASET as DAILY_BASIC_DATASET
 from screener.sync.daily_basic import fetch_daily_basic
+from screener.sync.dividend import DATASET as DIVIDEND_DATASET
+from screener.sync.dividend import fetch_dividend
 from screener.sync.errors import SyncError
 from screener.sync.fina_indicator import DATASET as FINA_INDICATOR_DATASET
 from screener.sync.fina_indicator import fetch_fina_indicator
@@ -28,6 +30,7 @@ DATASET_FETCHERS: dict[str, Callable[[sqlite3.Connection, object], int]] = {
     INCOME_DATASET: fetch_income,
     BALANCESHEET_DATASET: fetch_balancesheet,
     FINA_INDICATOR_DATASET: fetch_fina_indicator,
+    DIVIDEND_DATASET: fetch_dividend,
 }
 
 # 每个数据集的水位查询；整表替换的数据集写 None。键必须与 DATASET_FETCHERS 一致。
@@ -39,6 +42,7 @@ WATER_QUERIES: dict[str, str | None] = {
     INCOME_DATASET: "SELECT MAX(end_date) FROM income WHERE report_type = '2'",
     BALANCESHEET_DATASET: "SELECT MAX(end_date) FROM balancesheet WHERE report_type = '1'",
     FINA_INDICATOR_DATASET: "SELECT MAX(end_date) FROM fina_indicator",
+    DIVIDEND_DATASET: "SELECT MAX(record_date) FROM dividend",
 }
 
 
@@ -50,12 +54,16 @@ def registered_datasets() -> tuple[str, ...]:
     return tuple(DATASET_FETCHERS)
 
 
+_EMPTY_LABELS = {DIVIDEND_DATASET: "无数据，先跑回填脚本"}
+
+
 def dataset_water_levels(
     connection: sqlite3.Connection, datasets: tuple[str, ...]
 ) -> Mapping[str, str]:
     """给每个数据集一句人话的水位，供更新菜单显示。
 
     未登记的数据名照实说，不在这里报错——报错留给真正抓取时的 `fetch_datasets`。
+    分红送配的菜单只做增量，空表时不会自己去拉历史，所以标签和别的数据集不同。
     """
     levels = {}
     for dataset in datasets:
@@ -66,7 +74,10 @@ def dataset_water_levels(
             levels[dataset] = "整表替换"
         else:
             water = connection.execute(query).fetchone()[0]
-            levels[dataset] = "无数据，首次全量" if water is None else f"水位 {water}"
+            if water is not None:
+                levels[dataset] = f"水位 {water}"
+            else:
+                levels[dataset] = _EMPTY_LABELS.get(dataset, "无数据，首次全量")
     return levels
 
 
