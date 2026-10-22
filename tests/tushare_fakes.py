@@ -16,6 +16,7 @@ from screener.sync.dividend import COLUMNS as DIVIDEND_COLUMNS
 from screener.sync.fina_indicator import COLUMNS as FINA_INDICATOR_COLUMNS
 from screener.sync.income import COLUMNS as INCOME_COLUMNS
 from screener.sync.stock_basic import COLUMNS as STOCK_BASIC_COLUMNS
+from screener.sync.stock_st import COLUMNS as STOCK_ST_COLUMNS
 
 STOCK_BASIC_FIELD_LIMIT = 13
 
@@ -55,6 +56,11 @@ def dividend_row(**overrides):
     return {**dict.fromkeys(DIVIDEND_COLUMNS, None), **overrides}
 
 
+def stock_st_row(**overrides):
+    """一行 stock_st 的 5 列，默认全是空串。"""
+    return {**dict.fromkeys(STOCK_ST_COLUMNS, ""), **overrides}
+
+
 class FakeTushareClient:
     """按 `fields` 裁剪列的假客户端，不联网。"""
 
@@ -62,6 +68,7 @@ class FakeTushareClient:
         self,
         *,
         stock_basic_rows=(),
+        stock_st_rows=(),
         trade_cal_rows=(),
         suspend_d_rows=(),
         daily_basic_rows=(),
@@ -70,6 +77,7 @@ class FakeTushareClient:
         fina_indicator_rows=(),
     ):
         self.stock_basic_rows = list(stock_basic_rows)
+        self.stock_st_rows = list(stock_st_rows)
         self.trade_cal_rows = list(trade_cal_rows)
         self.suspend_d_rows = list(suspend_d_rows)
         self.daily_basic_rows = list(daily_basic_rows)
@@ -86,6 +94,12 @@ class FakeTushareClient:
 
     def trade_cal(self, **params):
         return self._slice(self.trade_cal_rows, self._record("trade_cal", params))
+
+    def stock_st(self, **params):
+        """按交易日期取当天的 ST 名单。"""
+        fields = self._record("stock_st", params)
+        picked = [row for row in self.stock_st_rows if row["trade_date"] == params["trade_date"]]
+        return self._slice(picked, fields)
 
     def suspend_d(self, **params):
         fields = self._record("suspend_d", params)

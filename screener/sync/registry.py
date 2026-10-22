@@ -55,6 +55,8 @@ def registered_datasets() -> tuple[str, ...]:
 
 
 _EMPTY_LABELS = {DIVIDEND_DATASET: "无数据，先跑回填脚本"}
+# 整表替换的数据集默认写「整表替换」；股票列表还要顺手把 ST 摘掉，得说清楚。
+_REPLACE_LABELS = {STOCK_BASIC_DATASET: "整表替换，剔除 ST"}
 
 
 def dataset_water_levels(
@@ -71,7 +73,7 @@ def dataset_water_levels(
         if dataset not in DATASET_FETCHERS:
             levels[dataset] = "未登记"
         elif query is None:
-            levels[dataset] = "整表替换"
+            levels[dataset] = _REPLACE_LABELS.get(dataset, "整表替换")
         else:
             water = connection.execute(query).fetchone()[0]
             if water is not None:

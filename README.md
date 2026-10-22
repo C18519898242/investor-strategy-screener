@@ -106,6 +106,14 @@ uv run --locked python scripts/backup_db.py --output D:\backup\a.sqlite3   # 用
 | `screener.sqlite3-wal` | 尚未合并的写入 | 为 0 字节时不需要；非 0 时必须与主文件一起复制 |
 | `screener.sqlite3-shm` | 共享内存索引 | 永远不需要，SQLite 会自动重建 |
 
+## 股票列表（整表替换，剔除 ST）
+
+菜单第 1 项拉两个接口：`stock_basic` 落全量，`stock_st` 落当天 ST 名单，再按代码把 ST 从 `stock_basic` 里删掉（`DELETE ... WHERE ts_code IN (SELECT ts_code FROM stock_st)`）。
+
+为什么拆两张表：`stock_basic` 没有「是不是 ST」的字段（`list_status` 只有 L/D/P），名称又是当前值，只能靠 `stock_st` 按交易日取。实测 20261016 那天 ST 共 201 只，与 `stock_basic` 里名称带 `ST` 的 201 只完全一致；整表替换后 5,577 → **5,376**。
+
+删除只看代码、不看名称，所以名称里带 `ST` 但不是当天 ST 名单的股票不会被误删。`stock_st` 每次整表替换，只保留最近一个交易日。
+
 ## 利润表全历史初始化
 
 菜单里的「利润表」只做增量：每次补**最近一个已过法定披露截止日**的报告期（4/30 补一季报和上年年报，8/31 补中报，10/31 补三季报），其余时间点运行不会发起请求。

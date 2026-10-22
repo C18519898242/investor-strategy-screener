@@ -98,7 +98,7 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual(
             levels,
             {
-                "股票列表": "整表替换",
+                "股票列表": "整表替换，剔除 ST",
                 "交易日历": "水位 20261016",
                 "停复牌": "水位 20261016",
                 "每日指标": "水位 20261016",

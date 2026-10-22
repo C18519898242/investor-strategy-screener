@@ -92,7 +92,7 @@ class MenuTest(unittest.TestCase):
 
         self.assertEqual(self.prompts, ["请选择：", "请选择：", "请选择："])
         text = "\n".join(self.output)
-        self.assertIn("1. 股票列表（整表替换）", text)
+        self.assertIn("1. 股票列表（整表替换，剔除 ST）", text)
         self.assertIn("2. 交易日历（无数据，首次全量）", text)
         self.assertIn("3. 停复牌（无数据，首次全量）", text)
         self.assertIn("4. 每日指标（无数据，首次全量）", text)
@@ -141,7 +141,7 @@ class MenuTest(unittest.TestCase):
     def test_the_menu_comes_back_after_each_pick(self):
         self._run(["1", "1", "", "0"])
 
-        self.assertEqual(self.output.count("1. 股票列表（整表替换）"), 2)
+        self.assertEqual(self.output.count("1. 股票列表（整表替换，剔除 ST）"), 2)
 
     def test_invalid_choice_is_asked_again(self):
         self._run(["1", "9", "2", "", "0"])

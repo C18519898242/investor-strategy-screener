@@ -58,6 +58,30 @@ class RawTablesTest(unittest.TestCase):
     def _columns(self, table):
         return [(row[1], row[5]) for row in self.connection.execute(f"PRAGMA table_info({table})")]
 
+    def test_stock_st_matches_the_columns_the_sync_module_writes(self):
+        """建表语句和 `screener.sync.stock_st.COLUMNS` 都是手写的，顺序错了会错列落库。"""
+        from screener.sync.stock_st import COLUMNS as STOCK_ST_COLUMNS
+
+        self.assertEqual(
+            [name for name, _ in self._columns("stock_st")],
+            list(STOCK_ST_COLUMNS),
+        )
+
+    def test_stock_st_keeps_one_row_per_stock_and_day(self):
+        primary = sorted((pk, name) for name, pk in self._columns("stock_st") if pk)
+
+        self.assertEqual([name for _, name in primary], ["ts_code", "trade_date"])
+
+    def test_stock_st_has_a_trade_date_index(self):
+        names = [
+            row[0]
+            for row in self.connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'stock_st'"
+            )
+        ]
+
+        self.assertIn("stock_st_trade_date", names)
+
     def test_raw_tables_have_the_decided_columns_and_primary_keys(self):
         self.assertEqual(
             [name for name, _ in self._columns("stock_basic")],

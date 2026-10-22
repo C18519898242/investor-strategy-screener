@@ -82,6 +82,19 @@ def open_database(path: Path) -> sqlite3.Connection:
     )
     connection.execute(
         """
+        CREATE TABLE IF NOT EXISTS stock_st (
+            ts_code TEXT NOT NULL,
+            name TEXT,
+            trade_date TEXT NOT NULL,
+            type TEXT,
+            type_name TEXT,
+            PRIMARY KEY (ts_code, trade_date)
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS stock_st_trade_date ON stock_st (trade_date)")
+    connection.execute(
+        """
         CREATE TABLE IF NOT EXISTS trade_cal (
             exchange TEXT NOT NULL,
             cal_date TEXT NOT NULL,
