@@ -8,6 +8,7 @@ from screener.store import insert_rows, open_database
 from screener.sync import cashflow as module
 from screener.sync.cashflow import COLUMNS, REPORT_TYPE, fetch_cashflow
 from screener.sync.errors import SyncError
+from screener.sync.registry import DATASET_FETCHERS, WATER_QUERIES
 from tests.tushare_fakes import cashflow_row
 
 TODAY = date(2026, 11, 1)
@@ -183,6 +184,15 @@ class CashflowTest(unittest.TestCase):
                 "SELECT COUNT(*) FROM cashflow WHERE c_pay_acq_const_fiolta IS NULL"
             ).fetchone(),
             (1,),
+        )
+
+
+class RegistrationTest(unittest.TestCase):
+    def test_the_dataset_is_registered_for_incremental_updates(self):
+        self.assertIs(DATASET_FETCHERS["现金流量表"], fetch_cashflow)
+        self.assertEqual(
+            WATER_QUERIES["现金流量表"],
+            "SELECT MAX(end_date) FROM cashflow WHERE report_type = '2'",
         )
 
 

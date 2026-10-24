@@ -40,6 +40,7 @@ scripts/
   balancesheet_backfill.py        资产负债表全历史初始化
   fina_indicator_backfill.py      财务指标全历史初始化
   dividend_backfill.py            分红送配全历史初始化
+  cashflow_backfill.py            现金流量表全历史初始化
 sources/
   data-source-evaluation.md       第 1 集的数据源复核
   episode-01-graham/              格雷厄姆视频核对资料
@@ -195,7 +196,7 @@ uv run --locked python scripts/dividend_backfill.py --restart    # 清空 divide
 
 ## 现金流量表全历史初始化
 
-> 这张表是为第 4 集（巴菲特：自由现金流净现比、资本支出比率）提前准备的，策略还没实现，所以**还没挂进菜单的「更新本地数据」**——增量函数 `fetch_cashflow` 已经写好并实测可用，登记到 `registry.py` 就能自动纳入更新。
+菜单里的「现金流量表」已经登记，只做增量，规则与利润表一致：每次补最近一个已过法定披露截止日的报告期（4/30 补一季报和上年年报，8/31 补中报，10/31 补三季报），其余时间点运行不会发起请求，水位是 `MAX(end_date)`。历史交给下面的回填脚本——这张表是为第 4 集（巴菲特：自由现金流净现比、资本支出比率）准备的，策略还没实现。
 
 首次建库用 `scripts/cashflow_backfill.py`，结构与 `income_backfill.py` 一致：逐股一次调用拉全部历史，4 并发，五列主键 upsert，断点续跑记录在 `data/cashflow-backfill-done.txt`：
 

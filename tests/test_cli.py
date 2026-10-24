@@ -100,6 +100,7 @@ class MenuTest(unittest.TestCase):
         self.assertIn("6. 资产负债表（无数据，首次全量）", text)
         self.assertIn("7. 财务指标（无数据，首次全量）", text)
         self.assertIn("8. 分红送配（无数据，先跑回填脚本）", text)
+        self.assertIn("9. 现金流量表（无数据，首次全量）", text)
         self.assertIn("0. 返回主菜单", text)
         self.assertNotIn("prices", text)
 
@@ -133,6 +134,11 @@ class MenuTest(unittest.TestCase):
 
         self.assertEqual(self.fetched, [("分红送配",)])
 
+    def test_the_ninth_entry_maps_to_the_cashflow_dataset(self):
+        self._run(["1", "9", "", "0"])
+
+        self.assertEqual(self.fetched, [("现金流量表",)])
+
     def test_picking_two_datasets_fetches_each_one(self):
         self._run(["1", "1", "", "2", "", "0"])
 
@@ -144,10 +150,10 @@ class MenuTest(unittest.TestCase):
         self.assertEqual(self.output.count("1. 股票列表（整表替换，剔除 ST）"), 2)
 
     def test_invalid_choice_is_asked_again(self):
-        self._run(["1", "9", "2", "", "0"])
+        self._run(["1", "10", "2", "", "0"])
 
         self.assertEqual(self.fetched, [("交易日历",)])
-        self.assertIn("编号应为 0~8 之间的数字", "\n".join(self.output))
+        self.assertIn("编号应为 0~9 之间的数字", "\n".join(self.output))
 
     def test_zero_at_the_dataset_menu_returns_without_fetching(self):
         code = self._run(["1", "0"])
