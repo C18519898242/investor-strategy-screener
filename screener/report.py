@@ -69,7 +69,7 @@ _STYLE = """  :root {
   .code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--muted); }
   .name { font-weight: 600; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .wrap { white-space: normal; min-width: 15ch; }
+  .wrap { white-space: normal; min-width: 20ch; }
   .empty { margin: 0; padding: 56px 24px; text-align: center; color: var(--muted); }
   footer { margin-top: 14px; color: var(--muted); font-size: 12.5px; text-align: right; }
   th.sortable { cursor: pointer; user-select: none; }
