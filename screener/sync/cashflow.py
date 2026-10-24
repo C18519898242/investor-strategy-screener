@@ -5,16 +5,27 @@
 000001 的 2021–2024 四个年报，`n_cashflow_act` 和 `c_pay_acq_const_fiolta` 用四季合计
 与累计值相比偏差 0.0000%。
 
-**`free_cashflow` 这一列上游恒为空**（实测 3 只股票 275 行全空），所以自由现金流要自己
-算：`n_cashflow_act - c_pay_acq_const_fiolta`。单季口径下 `n_income` 同样全空，净利润
-从 `income` 表取。
+两个字段上的坑（实测）
+    `free_cashflow` 上游恒为空（3 只股票 275 行全空），自由现金流要自己算：
+    `n_cashflow_act - c_pay_acq_const_fiolta`。`net_profit` 在单季口径下也基本为空
+    （270,268 行里只有 7,714 行有值），净利润从 `income` 表取。
+
+为什么走直连端点而不是 SDK 客户端
+    生产 SDK 代理（`TUSHARE_API_URL`）对 `cashflow` 一律返回
+    `[upstream_pool_exhausted] 数据当前不可用`，同一时刻 `income`、`balancesheet` 都能
+    正常返回，说明不是整体故障。直连端点没有这个问题——回填脚本用它拉了 27 万行。
 """
 
+import json
 import logging
 import sqlite3
+import urllib.error
+import urllib.request
 from datetime import date
 
+from screener.config import load_settings
 from screener.store import insert_rows
+from screener.sync.errors import SyncError
 from screener.sync.report_periods import target_periods
 from screener.sync.retry import call_with_retry
 
@@ -23,6 +34,9 @@ logger = logging.getLogger(__name__)
 DATASET = "现金流量表"
 
 REPORT_TYPE = "2"
+
+ENDPOINT = "https://datahubco.com/api/tushare"
+TIMEOUT_SECONDS = 300
 
 COLUMNS: tuple[str, ...] = (
     "ts_code",
@@ -128,6 +142,36 @@ COLUMNS: tuple[str, ...] = (
 KEY: tuple[str, ...] = ("ts_code", "end_date", "report_type", "ann_date", "update_flag")
 
 
+def _fetch_period(ts_code: str, period: str) -> list[dict]:
+    """取一只股票一个报告期的单季现金流量表。"""
+    token = load_settings().tushare_token.strip()
+    body = json.dumps(
+        {
+            "api_name": "cashflow",
+            "token": token,
+            "params": {"ts_code": ts_code, "period": period, "report_type": REPORT_TYPE},
+            "fields": ",".join(COLUMNS),
+        }
+    ).encode()
+    request = urllib.request.Request(
+        f"{ENDPOINT}/cashflow", data=body, headers={"Content-Type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+            payload = json.loads(response.read().decode())
+    except urllib.error.HTTPError as error:
+        payload = json.loads(error.read().decode() or "{}")
+    if payload.get("code") != 0:
+        code = payload.get("code")
+        message = str(payload.get("msg") or "")
+        if code == 429 or "concurrent" in message:
+            raise SyncError(f"rate_limited：{message}")
+        raise SyncError(f"code={code} {message}")
+    data = payload["data"]
+    fields = data["fields"]
+    return [dict(zip(fields, item, strict=False)) for item in data["items"]]
+
+
 def _codes_missing(connection: sqlite3.Connection, period: str) -> list[str]:
     """本地还没有这一期单季数据的在市股票。
 
@@ -148,44 +192,41 @@ def _codes_missing(connection: sqlite3.Connection, period: str) -> list[str]:
     ]
 
 
-def _store(connection: sqlite3.Connection, frame, period: str) -> int:
-    """把一次返回写进表，只留目标报告期的行。"""
-    if frame is None or frame.empty:
+def _store(connection: sqlite3.Connection, rows: list[dict], period: str) -> int:
+    """把一次返回写进表，只留目标报告期的行；同一版本号只留最后一条。"""
+    picked: dict[tuple, tuple] = {}
+    for row in rows:
+        if row.get("end_date") != period:
+            continue
+        picked[tuple(row.get(name) for name in KEY)] = tuple(row.get(name) for name in COLUMNS)
+    if not picked:
         return 0
-    selected = frame.reindex(columns=list(COLUMNS))
-    selected = selected[selected["end_date"] == period]
-    if selected.empty:
-        return 0
-    selected = selected.drop_duplicates(subset=list(KEY), keep="last")
-    rows = selected.astype(object).where(selected.notna(), None)
     return insert_rows(
         connection,
         table="cashflow",
         columns=COLUMNS,
-        rows=rows.itertuples(index=False, name=None),
+        rows=picked.values(),
     )
 
 
 def fetch_cashflow(
-    connection: sqlite3.Connection, client: object, *, today: date | None = None
+    connection: sqlite3.Connection, client: object = None, *, today: date | None = None
 ) -> int:
-    """按报告期补齐现金流量表：只请求本地缺的股票，每只一次调用。"""
+    """按报告期补齐现金流量表：只请求本地缺的股票，每只一次调用。
+
+    `client` 是登记表统一传进来的 SDK 客户端，这个数据集用不上——见模块说明。
+    """
     day = today or date.today()
     written = 0
     for period in target_periods(day):
         codes = _codes_missing(connection, period)
         total = len(codes)
-        logger.info("现金流量表 %s：本地缺 %d 只", period, total)
+        logger.info("%s %s：本地缺 %d 只", DATASET, period, total)
         for index, ts_code in enumerate(codes, start=1):
-            logger.info("现金流量表 %s 第 %d/%d 只：%s", period, index, total, ts_code)
-            frame = call_with_retry(
-                lambda ts_code=ts_code, period=period: client.cashflow(
-                    ts_code=ts_code,
-                    period=period,
-                    report_type=REPORT_TYPE,
-                    fields=",".join(COLUMNS),
-                )
+            logger.info("%s %s 第 %d/%d 只：%s", DATASET, period, index, total, ts_code)
+            rows = call_with_retry(
+                lambda ts_code=ts_code, period=period: _fetch_period(ts_code, period)
             )
-            written += _store(connection, frame, period)
+            written += _store(connection, rows, period)
 
     return written

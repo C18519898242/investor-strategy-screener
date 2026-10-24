@@ -195,7 +195,7 @@ uv run --locked python scripts/dividend_backfill.py --restart    # 清空 divide
 
 ## 现金流量表全历史初始化
 
-> 这张表是为第 4 集（巴菲特：自由现金流净现比、资本支出比率）提前准备的，策略还没实现，所以**还没挂进菜单的「更新本地数据」**——`screener/sync/cashflow.py` 的增量函数写好了，登记到 `registry.py` 就能自动纳入更新。
+> 这张表是为第 4 集（巴菲特：自由现金流净现比、资本支出比率）提前准备的，策略还没实现，所以**还没挂进菜单的「更新本地数据」**——增量函数 `fetch_cashflow` 已经写好并实测可用，登记到 `registry.py` 就能自动纳入更新。
 
 首次建库用 `scripts/cashflow_backfill.py`，结构与 `income_backfill.py` 一致：逐股一次调用拉全部历史，4 并发，五列主键 upsert，断点续跑记录在 `data/cashflow-backfill-done.txt`：
 
@@ -205,6 +205,8 @@ uv run --locked python scripts/cashflow_backfill.py --limit 20   # 只看前 20 
 uv run --locked python scripts/cashflow_backfill.py --restart    # 清空 cashflow 表后重来
 ```
 
+2026-10-24 实测：5,374 只股票、270,268 行、0 个请求失败、耗时 25 分 26 秒，主键重复组 0。只有 301660.SZ、301718.SZ 两只新股完全没有现金流量表。
+
 2026-10-24 的取数研究结论（都是实测，不是文档抄的）：
 
 - **日期区间按公告日过滤，不是报告期。** `start_date=20240101&end_date=20241231` 返回的是 2023 年报和 2024 年一至三季报，所以回填脚本用 `19900101` 到今天的大窗口，不用担心漏期。
@@ -212,6 +214,7 @@ uv run --locked python scripts/cashflow_backfill.py --restart    # 清空 cashfl
 - **`free_cashflow` 恒为空**（3 只股票 275 行全空），自由现金流得自己算 `n_cashflow_act - c_pay_acq_const_fiolta`。单季口径下 `n_income`、`net_profit` 也基本为空，净利润从 `income` 表取。
 - **字段按行业差别很大**：银行和保险没有 `c_fr_sale_sg`（销售商品收到的现金），但 `c_pay_acq_const_fiolta` 三家都有（84/84、99/100、91/91）。做资本支出比率时，银行、保险这类分母口径要单独想。
 - **重复行靠 `update_flag` 区分**：只按 `(ts_code, end_date, ann_date)` 分会有大量"重复"（000001 全历史 30 组），把 `update_flag` 加进主键后一组不剩，都是更正公告的不同版本。
+- **增量必须走直连端点**。生产 SDK 代理（`TUSHARE_API_URL`，菜单用的那条）对 `cashflow` 一律返回 `[upstream_pool_exhausted] 数据当前不可用`，同一时刻 `income`、`balancesheet` 都能正常返回，说明不是整体故障。所以 `cashflow.py` 像 `dividend.py` 一样自己发 HTTP 到 `datahubco.com`，不用 SDK 客户端；`fetch_cashflow` 的 `client` 参数因此用不上。
 
 ## 第 1 集筛选（格雷厄姆）
 

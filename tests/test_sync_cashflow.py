@@ -2,10 +2,13 @@ import shutil
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest import mock
 
 from screener.store import insert_rows, open_database
+from screener.sync import cashflow as module
 from screener.sync.cashflow import COLUMNS, REPORT_TYPE, fetch_cashflow
-from tests.tushare_fakes import FakeTushareClient, cashflow_row
+from screener.sync.errors import SyncError
+from tests.tushare_fakes import cashflow_row
 
 TODAY = date(2026, 11, 1)
 
@@ -29,6 +32,21 @@ def values(ts_code="000001.SZ", period="20260930", **overrides):
     return tuple(row[name] for name in COLUMNS)
 
 
+class FakeFeed:
+    """替掉 `_fetch_period`：按请求记录调用，返回预先排好的行。"""
+
+    def __init__(self, rows=(), error=None):
+        self.rows = list(rows)
+        self.error = error
+        self.calls = []
+
+    def __call__(self, ts_code, period):
+        self.calls.append((ts_code, period))
+        if self.error is not None:
+            raise self.error
+        return [row for row in self.rows if row["ts_code"] == ts_code and row["end_date"] == period]
+
+
 class CashflowTest(unittest.TestCase):
     def setUp(self):
         self.directory = Path(__file__).parents[1] / "test-temp" / self.id().split(".")[-1]
@@ -46,8 +64,9 @@ class CashflowTest(unittest.TestCase):
         self.connection.close()
         shutil.rmtree(self.directory, ignore_errors=True)
 
-    def _requested(self, client):
-        return [params["ts_code"] for _, params in client.calls]
+    def _run(self, feed, today=TODAY):
+        with mock.patch.object(module, "_fetch_period", feed):
+            return fetch_cashflow(self.connection, today=today)
 
     def _stored(self):
         return [
@@ -59,13 +78,11 @@ class CashflowTest(unittest.TestCase):
         ]
 
     def test_every_missing_stock_is_requested_and_stored(self):
-        client = FakeTushareClient(
-            cashflow_rows=[statement("000001.SZ"), statement("000002.SZ")],
-        )
+        feed = FakeFeed([statement("000001.SZ"), statement("000002.SZ")])
 
-        count = fetch_cashflow(self.connection, client, today=TODAY)
+        count = self._run(feed)
 
-        self.assertEqual(self._requested(client), ["000001.SZ", "000002.SZ"])
+        self.assertEqual(feed.calls, [("000001.SZ", "20260930"), ("000002.SZ", "20260930")])
         self.assertEqual(count, 2)
         self.assertEqual(
             self._stored(),
@@ -75,31 +92,22 @@ class CashflowTest(unittest.TestCase):
             ],
         )
 
-    def test_the_request_names_one_period_and_the_single_quarter_caliber(self):
-        client = FakeTushareClient(cashflow_rows=[statement("000001.SZ")])
+    def test_a_second_run_makes_no_request(self):
+        self._run(FakeFeed([statement("000001.SZ"), statement("000002.SZ")]))
+        feed = FakeFeed()
 
-        fetch_cashflow(self.connection, client, today=TODAY)
+        count = self._run(feed)
 
-        self.assertEqual(
-            client.calls[0],
-            (
-                "cashflow",
-                {
-                    "ts_code": "000001.SZ",
-                    "period": "20260930",
-                    "report_type": "2",
-                    "fields": ",".join(COLUMNS),
-                },
-            ),
-        )
+        self.assertEqual(feed.calls, [])
+        self.assertEqual(count, 0)
 
     def test_stocks_that_already_have_the_period_are_not_requested(self):
         insert_rows(self.connection, table="cashflow", columns=COLUMNS, rows=[values("000001.SZ")])
-        client = FakeTushareClient(cashflow_rows=[statement("000002.SZ")])
+        feed = FakeFeed([statement("000002.SZ")])
 
-        fetch_cashflow(self.connection, client, today=TODAY)
+        self._run(feed)
 
-        self.assertEqual(self._requested(client), ["000002.SZ"])
+        self.assertEqual(feed.calls, [("000002.SZ", "20260930")])
 
     def test_a_cumulative_row_does_not_count_as_the_single_quarter_row(self):
         insert_rows(
@@ -108,11 +116,11 @@ class CashflowTest(unittest.TestCase):
             columns=COLUMNS,
             rows=[values("000001.SZ", report_type="1")],
         )
-        client = FakeTushareClient(cashflow_rows=[statement("000001.SZ")])
+        feed = FakeFeed([statement("000001.SZ")])
 
-        fetch_cashflow(self.connection, client, today=TODAY)
+        self._run(feed)
 
-        self.assertIn("000001.SZ", self._requested(client))
+        self.assertIn(("000001.SZ", "20260930"), feed.calls)
         self.assertEqual(
             self.connection.execute(
                 "SELECT COUNT(*) FROM cashflow WHERE report_type = ?", (REPORT_TYPE,)
@@ -121,51 +129,95 @@ class CashflowTest(unittest.TestCase):
         )
 
     def test_the_capex_and_operating_cash_flow_columns_are_kept(self):
-        client = FakeTushareClient(cashflow_rows=[statement("000001.SZ")])
+        self._run(FakeFeed([statement("000001.SZ")]))
 
-        fetch_cashflow(self.connection, client, today=TODAY)
-
-        row = self.connection.execute(
-            "SELECT n_cashflow_act, c_pay_acq_const_fiolta FROM cashflow"
-        ).fetchone()
-        self.assertEqual(row, (1000.0, 200.0))
+        self.assertEqual(
+            self.connection.execute(
+                "SELECT n_cashflow_act, c_pay_acq_const_fiolta FROM cashflow"
+            ).fetchone(),
+            (1000.0, 200.0),
+        )
 
     def test_a_stock_without_an_answer_is_requested_again_next_run(self):
-        client = FakeTushareClient(cashflow_rows=[statement("000001.SZ")])
+        first = self._run(FakeFeed([statement("000001.SZ")]))
+        feed = FakeFeed()
 
-        first = fetch_cashflow(self.connection, client, today=TODAY)
-        second = fetch_cashflow(self.connection, client, today=TODAY)
+        second = self._run(feed)
 
         self.assertEqual(first, 1)
         self.assertEqual(second, 0)
-        self.assertEqual(self._requested(client), ["000001.SZ", "000002.SZ", "000002.SZ"])
+        self.assertEqual(feed.calls, [("000002.SZ", "20260930")])
 
     def test_two_revisions_of_the_same_period_are_both_kept(self):
-        client = FakeTushareClient(
-            cashflow_rows=[
+        feed = FakeFeed(
+            [
                 statement("000001.SZ", update_flag="0"),
                 statement("000001.SZ", update_flag="1", ann_date="20261025"),
             ]
         )
 
-        count = fetch_cashflow(self.connection, client, today=TODAY)
+        count = self._run(feed)
 
         self.assertEqual(count, 2)
-        self.assertEqual(
-            self.connection.execute("SELECT COUNT(*) FROM cashflow").fetchone()[0],
-            2,
-        )
+        self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM cashflow").fetchone()[0], 2)
 
     def test_duplicate_rows_of_one_revision_are_collapsed_before_writing(self):
-        client = FakeTushareClient(cashflow_rows=[statement("000001.SZ"), statement("000001.SZ")])
-
-        count = fetch_cashflow(self.connection, client, today=TODAY)
+        count = self._run(FakeFeed([statement("000001.SZ"), statement("000001.SZ")]))
 
         self.assertEqual(count, 1)
+        self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM cashflow").fetchone()[0], 1)
+
+    def test_rows_of_another_period_are_dropped(self):
+        feed = FakeFeed([statement("000001.SZ", "20260630")])
+
+        count = self._run(feed)
+
+        self.assertEqual(count, 0)
+        self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM cashflow").fetchone()[0], 0)
+
+    def test_null_values_are_stored_as_sql_null(self):
+        self._run(FakeFeed([statement("000001.SZ", c_pay_acq_const_fiolta=None)]))
+
         self.assertEqual(
-            self.connection.execute("SELECT COUNT(*) FROM cashflow").fetchone()[0],
-            1,
+            self.connection.execute(
+                "SELECT COUNT(*) FROM cashflow WHERE c_pay_acq_const_fiolta IS NULL"
+            ).fetchone(),
+            (1,),
         )
+
+
+class TransportTest(unittest.TestCase):
+    def test_a_rate_limit_answer_becomes_a_sync_error(self):
+        payload = b'{"code": 429, "msg": "too many concurrent requests"}'
+
+        with mock.patch.object(
+            module.urllib.request, "urlopen", side_effect=self._http_ok(payload)
+        ):
+            with self.assertRaises(SyncError):
+                module._fetch_period("000001.SZ", "20260930")
+
+    def test_a_non_zero_code_becomes_a_sync_error(self):
+        payload = b'{"code": 40001, "msg": "invalid token"}'
+
+        with mock.patch.object(
+            module.urllib.request, "urlopen", side_effect=self._http_ok(payload)
+        ):
+            with self.assertRaises(SyncError):
+                module._fetch_period("000001.SZ", "20260930")
+
+    @staticmethod
+    def _http_ok(payload):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return payload
+
+        return lambda *args, **kwargs: Response()
 
 
 if __name__ == "__main__":
