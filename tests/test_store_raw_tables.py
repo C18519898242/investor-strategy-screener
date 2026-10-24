@@ -342,6 +342,30 @@ class RawTablesTest(unittest.TestCase):
             (2,),
         )
 
+    def test_cashflow_table_matches_the_columns_the_sync_module_writes(self):
+        """建表语句和 `screener.sync.cashflow.COLUMNS` 都是手写的，顺序错了会错列落库。"""
+        from screener.sync.cashflow import COLUMNS as CASHFLOW_COLUMNS
+
+        self.assertEqual([name for name, _ in self._columns("cashflow")], list(CASHFLOW_COLUMNS))
+
+    def test_cashflow_primary_key_covers_the_whole_revision_identity(self):
+        primary = sorted((pk, name) for name, pk in self._columns("cashflow") if pk)
+
+        self.assertEqual(
+            [name for _, name in primary],
+            ["ts_code", "end_date", "report_type", "ann_date", "update_flag"],
+        )
+
+    def test_cashflow_has_an_end_date_index(self):
+        names = [
+            row[0]
+            for row in self.connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'cashflow'"
+            )
+        ]
+
+        self.assertIn("idx_cashflow_end_date", names)
+
     def test_balancesheet_table_matches_the_columns_the_sync_module_writes(self):
         """建表语句和 `screener.sync.balancesheet.COLUMNS` 都是手写的，顺序错了会错列落库。"""
         from screener.sync.balancesheet import COLUMNS as BALANCESHEET_COLUMNS

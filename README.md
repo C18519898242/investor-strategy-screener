@@ -193,6 +193,26 @@ uv run --locked python scripts/dividend_backfill.py --restart    # 清空 divide
 
 进度记录在 `data/dividend-backfill-done.txt`。**同样地，清空过表却留着进度文件，要重灌必须带 `--restart`。**
 
+## 现金流量表全历史初始化
+
+> 这张表是为第 4 集（巴菲特：自由现金流净现比、资本支出比率）提前准备的，策略还没实现，所以**还没挂进菜单的「更新本地数据」**——`screener/sync/cashflow.py` 的增量函数写好了，登记到 `registry.py` 就能自动纳入更新。
+
+首次建库用 `scripts/cashflow_backfill.py`，结构与 `income_backfill.py` 一致：逐股一次调用拉全部历史，4 并发，五列主键 upsert，断点续跑记录在 `data/cashflow-backfill-done.txt`：
+
+```bash
+uv run --locked python scripts/cashflow_backfill.py              # 全量
+uv run --locked python scripts/cashflow_backfill.py --limit 20   # 只看前 20 只试跑
+uv run --locked python scripts/cashflow_backfill.py --restart    # 清空 cashflow 表后重来
+```
+
+2026-10-24 的取数研究结论（都是实测，不是文档抄的）：
+
+- **日期区间按公告日过滤，不是报告期。** `start_date=20240101&end_date=20241231` 返回的是 2023 年报和 2024 年一至三季报，所以回填脚本用 `19900101` 到今天的大窗口，不用担心漏期。
+- **单季口径能加出累计值。** 600519 与 000001 的 2021–2024 四个年报，`n_cashflow_act`、`c_pay_acq_const_fiolta` 用四个单季相加与累计口径返回的值偏差 0.0000%，因此只存 `report_type=2`，与利润表一致。
+- **`free_cashflow` 恒为空**（3 只股票 275 行全空），自由现金流得自己算 `n_cashflow_act - c_pay_acq_const_fiolta`。单季口径下 `n_income`、`net_profit` 也基本为空，净利润从 `income` 表取。
+- **字段按行业差别很大**：银行和保险没有 `c_fr_sale_sg`（销售商品收到的现金），但 `c_pay_acq_const_fiolta` 三家都有（84/84、99/100、91/91）。做资本支出比率时，银行、保险这类分母口径要单独想。
+- **重复行靠 `update_flag` 区分**：只按 `(ts_code, end_date, ann_date)` 分会有大量"重复"（000001 全历史 30 组），把 `update_flag` 加进主键后一组不剩，都是更正公告的不同版本。
+
 ## 第 1 集筛选（格雷厄姆）
 
 菜单「2. 运行选股」→「1. 格雷厄姆（可用）」，输入日期后按 `strategies.md` 的 E01-1～E01-8 逐项判定，结果写到 `outputs/episode-01-graham/screen-<时间戳>.html`。留空＝上一交易日。代码在 `screener/strategies/episode_01_graham.py`，逐项口径见该文件的模块说明。

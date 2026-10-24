@@ -11,6 +11,7 @@
 import pandas as pd
 
 from screener.sync.balancesheet import COLUMNS as BALANCESHEET_COLUMNS
+from screener.sync.cashflow import COLUMNS as CASHFLOW_COLUMNS
 from screener.sync.daily_basic import COLUMNS as DAILY_BASIC_COLUMNS
 from screener.sync.dividend import COLUMNS as DIVIDEND_COLUMNS
 from screener.sync.fina_indicator import COLUMNS as FINA_INDICATOR_COLUMNS
@@ -46,6 +47,11 @@ def balancesheet_row(**overrides):
     return {**dict.fromkeys(BALANCESHEET_COLUMNS, None), **overrides}
 
 
+def cashflow_row(**overrides):
+    """一行 cashflow 的 97 列，默认全是 None。"""
+    return {**dict.fromkeys(CASHFLOW_COLUMNS, None), **overrides}
+
+
 def fina_indicator_row(**overrides):
     """一行 fina_indicator 的 109 列，默认全是 None。"""
     return {**dict.fromkeys(FINA_INDICATOR_COLUMNS, None), **overrides}
@@ -74,6 +80,7 @@ class FakeTushareClient:
         daily_basic_rows=(),
         income_rows=(),
         balancesheet_rows=(),
+        cashflow_rows=(),
         fina_indicator_rows=(),
     ):
         self.stock_basic_rows = list(stock_basic_rows)
@@ -83,6 +90,7 @@ class FakeTushareClient:
         self.daily_basic_rows = list(daily_basic_rows)
         self.income_rows = list(income_rows)
         self.balancesheet_rows = list(balancesheet_rows)
+        self.cashflow_rows = list(cashflow_rows)
         self.fina_indicator_rows = list(fina_indicator_rows)
         self.calls = []
 
@@ -133,6 +141,18 @@ class FakeTushareClient:
         picked = [
             row
             for row in self.balancesheet_rows
+            if row["ts_code"] == params["ts_code"]
+            and row["end_date"] == params["period"]
+            and row["report_type"] == params["report_type"]
+        ]
+        return self._slice(picked, fields)
+
+    def cashflow(self, **params):
+        """按 ts_code + period + report_type 取，照真实代理：一次只给一个报告期的一种口径。"""
+        fields = self._record("cashflow", params)
+        picked = [
+            row
+            for row in self.cashflow_rows
             if row["ts_code"] == params["ts_code"]
             and row["end_date"] == params["period"]
             and row["report_type"] == params["report_type"]
